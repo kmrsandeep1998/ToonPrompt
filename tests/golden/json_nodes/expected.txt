@@ -1,0 +1,4 @@
+data:
+  nodes[2]{id,name}:
+    1,Node 1
+    2,Node 2

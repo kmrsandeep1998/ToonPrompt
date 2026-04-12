@@ -1,0 +1,5 @@
+Find the bug in this API flow.
+
+```json
+{"service":"checkout","errors":[{"code":502,"message":"upstream timeout"},{"code":502,"message":"upstream timeout"}]}
+```

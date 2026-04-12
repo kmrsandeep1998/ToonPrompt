@@ -1,0 +1,4 @@
+2026-04-12T10:00:00Z ERROR database timeout
+2026-04-12T10:00:01Z ERROR database timeout
+2026-04-12T10:00:02Z ERROR database timeout
+2026-04-12T10:00:03Z ERROR database timeout
