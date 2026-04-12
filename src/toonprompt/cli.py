@@ -6,9 +6,9 @@ import sys
 
 from . import __version__
 from .adapters import resolve_adapter, run_adapter, tool_status
-from .config import default_config_path, load_config, write_default_config
-from .detector import build_document, read_prompt
-from .transformer import transform_document
+from .config import default_config_path, write_default_config
+from .errors import AdapterExecutionError, ConfigError, PromptInputError, ToonPromptError
+from .services import PromptProcessingService, doctor_report
 
 
 TOOLS = ("codex", "claude", "cursor", "gemini")
@@ -42,20 +42,27 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "version":
-        print(__version__)
-        return 0
-    if args.command == "doctor":
-        return _run_doctor()
-    if args.command == "config":
-        path = write_default_config(args.path)
-        print(f"Wrote config to {path}")
-        return 0
-    if args.command == "inspect":
-        return _run_inspect(args)
-    return _run_tool(args.command, args)
+    try:
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        if args.command == "version":
+            print(__version__)
+            return 0
+        if args.command == "doctor":
+            return _run_doctor()
+        if args.command == "config":
+            path = write_default_config(args.path)
+            print(f"Wrote config to {path}")
+            return 0
+        if args.command == "inspect":
+            return _run_inspect(args)
+        return _run_tool(args.command, args)
+    except (ConfigError, PromptInputError, AdapterExecutionError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except ToonPromptError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
 
 
 def main_codex() -> int:
@@ -81,10 +88,9 @@ def _add_prompt_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_inspect(args: argparse.Namespace) -> int:
-    config = load_config()
-    prompt = read_prompt(args.prompt, args.prompt_file, args.stdin)
-    document = build_document(prompt)
-    result = transform_document(document, config)
+    processed = PromptProcessingService().process(args.prompt, args.prompt_file, args.stdin)
+    config = processed.config
+    result = processed.result
     print(_format_summary(result))
     if args.explain or config.learning_explanations:
         print("\nExplanations:")
@@ -99,10 +105,9 @@ def _run_inspect(args: argparse.Namespace) -> int:
 
 
 def _run_tool(tool: str, args: argparse.Namespace) -> int:
-    config = load_config()
-    prompt = read_prompt(args.prompt, args.prompt_file, args.stdin)
-    document = build_document(prompt)
-    result = transform_document(document, config)
+    processed = PromptProcessingService().process(args.prompt, args.prompt_file, args.stdin)
+    config = processed.config
+    result = processed.result
     if args.preview:
         print(_format_summary(result), file=sys.stderr)
         print("\nTransformed prompt:\n", file=sys.stderr)
@@ -123,8 +128,9 @@ def _run_tool(tool: str, args: argparse.Namespace) -> int:
 
 
 def _run_doctor() -> int:
-    config = load_config()
-    print(f"Config path: {default_config_path()}")
+    config, config_line = doctor_report()
+    print(config_line)
+    print(f"Config valid: yes")
     print("Tools:")
     missing = False
     for tool in TOOLS:

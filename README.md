@@ -2,6 +2,8 @@
 
 ToonPrompt is a pip-installable wrapper for coding CLIs such as Codex, Claude, Cursor, and Gemini. It preserves natural-language instructions, detects bulky structured context like JSON, YAML, logs, stack traces, and repeated records, then compresses only those sections into a deterministic Toon-style format before forwarding the prompt to the native tool.
 
+This repository is currently in public alpha. The packaging metadata, contribution docs, and release scaffolding are intentionally lightweight so the project can ship early without hiding the rough edges.
+
 ## Why this exists
 
 Large coding prompts often waste context on repeated keys, punctuation, and machine-shaped payloads. ToonPrompt reduces that overhead while keeping human intent readable and leaving uncertain content unchanged.
@@ -26,7 +28,7 @@ pip install git+https://github.com/kmrsandeep1998/ToonPrompt.git
 
 ```bash
 git clone https://github.com/kmrsandeep1998/ToonPrompt.git
-cd toonCli
+cd ToonPrompt
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
@@ -161,3 +163,10 @@ Run tests:
 ```bash
 pytest
 ```
+
+Useful repo docs:
+
+- [Changelog](./CHANGELOG.md)
+- [Contributing](./CONTRIBUTING.md)
+- [Security](./SECURITY.md)
+- [Releasing](./docs/RELEASING.md)

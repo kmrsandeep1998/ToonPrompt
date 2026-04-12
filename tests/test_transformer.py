@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from unittest.mock import patch
+
 from toonprompt.config import Config, write_default_config
 from toonprompt.detector import build_document
 from toonprompt.serializer import to_toon
@@ -52,3 +54,19 @@ def test_write_default_config(tmp_path: Path) -> None:
     path = write_default_config(tmp_path / "config.toml")
     assert path.exists()
     assert "structured-only" in path.read_text()
+
+
+def test_disabled_compression_rule_keeps_original_text() -> None:
+    config = Config()
+    config.compression_rules["json"] = False
+    text = '{"nodes":[{"id":1,"name":"Node 1"},{"id":2,"name":"Node 2"}]}'
+    result = transform_document(build_document(text), config)
+    assert result.transformed is False
+    assert result.final_text == text
+
+
+def test_logging_failures_do_not_block_transformation() -> None:
+    text = '{"nodes":[{"id":1,"name":"Node 1"},{"id":2,"name":"Node 2"}]}'
+    with patch("toonprompt.policy.log_event", side_effect=OSError("disk full")):
+        result = transform_document(build_document(text), Config())
+    assert result.transformed is True

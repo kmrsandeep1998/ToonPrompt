@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 from toonprompt.cli import main
@@ -28,6 +29,7 @@ def test_doctor_exit_code_when_tools_missing(capsys) -> None:
     captured = capsys.readouterr()
     assert code == 1
     assert "missing" in captured.out
+    assert "Config valid: yes" in captured.out
 
 
 def test_run_tool_executes_adapter() -> None:
@@ -38,3 +40,15 @@ def test_run_tool_executes_adapter() -> None:
     _, native_args, prompt_text = run_adapter.call_args[0]
     assert native_args == ["--model", "gpt-5.4"]
     assert "data:" in prompt_text
+
+
+def test_invalid_config_returns_clean_error(capsys, monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    target = config_dir / "toonprompt" / "config.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text('toon_format = "999"\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+    code = main(["inspect", "--prompt", '{"id":1}'])
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "unsupported toon_format 999" in captured.err

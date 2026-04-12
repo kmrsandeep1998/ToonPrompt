@@ -4,22 +4,44 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toonprompt"
-version = "0.1.0"
+version = "0.1.0a1"
 description = "Universal prompt optimization wrapper for coding CLIs that compresses structured context into Toon-style blocks."
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
   {name = "OpenAI Codex"}
+]
+keywords = ["cli", "prompt", "codex", "claude", "cursor", "gemini", "compression"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Build Tools",
+  "Topic :: Text Processing",
 ]
 dependencies = [
   "PyYAML>=6.0",
   "tomli>=2.0; python_version < '3.11'"
 ]
 
+[project.urls]
+Homepage = "https://github.com/kmrsandeep1998/ToonPrompt"
+Repository = "https://github.com/kmrsandeep1998/ToonPrompt"
+Issues = "https://github.com/kmrsandeep1998/ToonPrompt/issues"
+Changelog = "https://github.com/kmrsandeep1998/ToonPrompt/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/kmrsandeep1998/ToonPrompt/blob/main/README.md"
+
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.0"
+  "build>=1.0",
+  "pre-commit>=3.0",
+  "pytest>=8.0",
+  "twine>=5.0"
 ]
 
 [project.scripts]
