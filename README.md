@@ -19,13 +19,13 @@ Default behavior:
 ### From GitHub
 
 ```bash
-pip install git+https://github.com/kmrsandeep1998/toonCli.git
+pip install git+https://github.com/kmrsandeep1998/ToonPrompt.git
 ```
 
 ### For development
 
 ```bash
-git clone https://github.com/kmrsandeep1998/toonCli.git
+git clone https://github.com/kmrsandeep1998/ToonPrompt.git
 cd toonCli
 python -m venv .venv
 source .venv/bin/activate
