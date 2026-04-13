@@ -186,6 +186,8 @@ def validate_config(config: Config) -> Config:
         raise ConfigError("local_metrics_enabled must be a boolean")
     if not supported_format(config.toon_format):
         raise ConfigError(f"unsupported toon_format {config.toon_format}")
+    if not isinstance(config.token_estimator, str):
+        raise ConfigError("token_estimator must be a string")
     if config.token_estimator not in {"auto", "heuristic", "tiktoken"}:
         raise ConfigError("token_estimator must be one of: auto, heuristic, tiktoken")
     if not isinstance(config.tokenizer_model, str) or not config.tokenizer_model.strip():

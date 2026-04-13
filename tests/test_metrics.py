@@ -15,3 +15,13 @@ def test_metrics_store_recovers_from_corrupt_file(tmp_path: Path) -> None:
     summary = store.summary()
     assert summary.transforms_attempted == 1
     assert summary.transforms_applied == 1
+
+
+def test_metrics_store_recovers_from_unexpected_json_shape(tmp_path: Path) -> None:
+    store = LocalMetricsStore(state_dir=tmp_path)
+    malformed = tmp_path / "metrics.json"
+    malformed.write_text("{}")
+    store.record(transformed=False, input_tokens=5, output_tokens=5, reason="pass-through")
+    summary = store.summary()
+    assert summary.transforms_attempted == 1
+    assert summary.pass_through == 1

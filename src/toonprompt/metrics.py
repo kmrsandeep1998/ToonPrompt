@@ -53,24 +53,39 @@ class LocalMetricsStore:
 
     def _load(self) -> dict:
         if not self.path.exists():
-            return {
-                "transforms_attempted": 0,
-                "transforms_applied": 0,
-                "pass_through": 0,
-                "estimated_token_delta_total": 0,
-                "pass_through_reasons": {},
-            }
+            return self._empty_payload()
         try:
-            return json.loads(self.path.read_text())
+            payload = json.loads(self.path.read_text())
         except (json.JSONDecodeError, OSError):
-            return {
-                "transforms_attempted": 0,
-                "transforms_applied": 0,
-                "pass_through": 0,
-                "estimated_token_delta_total": 0,
-                "pass_through_reasons": {},
-            }
+            return self._empty_payload()
+        return self._normalize_payload(payload)
 
     def _write(self, payload: dict) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+
+    def _empty_payload(self) -> dict:
+        return {
+            "transforms_attempted": 0,
+            "transforms_applied": 0,
+            "pass_through": 0,
+            "estimated_token_delta_total": 0,
+            "pass_through_reasons": {},
+        }
+
+    def _normalize_payload(self, payload: object) -> dict:
+        if not isinstance(payload, dict):
+            return self._empty_payload()
+        normalized = self._empty_payload()
+        for key in ("transforms_attempted", "transforms_applied", "pass_through", "estimated_token_delta_total"):
+            value = payload.get(key)
+            if isinstance(value, int) and value >= 0:
+                normalized[key] = value
+        reasons = payload.get("pass_through_reasons")
+        if isinstance(reasons, dict):
+            safe_reasons: dict[str, int] = {}
+            for reason, count in reasons.items():
+                if isinstance(reason, str) and isinstance(count, int) and count >= 0:
+                    safe_reasons[reason] = count
+            normalized["pass_through_reasons"] = safe_reasons
+        return normalized

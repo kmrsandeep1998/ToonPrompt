@@ -47,3 +47,13 @@ def test_invalid_token_estimator_raises_config_error(monkeypatch, tmp_path: Path
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
     with pytest.raises(ConfigError, match="token_estimator"):
         load_config(cwd=tmp_path)
+
+
+def test_non_string_token_estimator_raises_config_error(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    target = config_dir / "toonprompt" / "config.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text("token_estimator = [\"auto\"]\n")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+    with pytest.raises(ConfigError, match="token_estimator must be a string"):
+        load_config(cwd=tmp_path)
