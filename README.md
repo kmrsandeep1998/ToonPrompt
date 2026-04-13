@@ -40,12 +40,14 @@ Inspect a prompt without calling a native CLI:
 
 ```bash
 toon inspect --prompt-file prompt.txt --preview --explain
+toon inspect --prompt-file prompt.txt --dry-run --diff --format markdown
 ```
 
 Proxy a supported CLI:
 
 ```bash
 toon codex --prompt-file prompt.txt -- --model gpt-5.4
+toon codex --prompt-file prompt.txt --dry-run
 printf '%s\n' '{"id":1,"name":"node"}' | toon claude --stdin -- --print
 toon-cursor --prompt "Explain this stack trace" -- --help
 ```
@@ -66,6 +68,13 @@ Show local metrics (opt-in):
 
 ```bash
 toon metrics
+toon metrics --json
+```
+
+Validate prompt files against a token budget:
+
+```bash
+toon check --max-tokens 12000 prompts/*.txt
 ```
 
 ## Supported prompt sources
@@ -120,6 +129,12 @@ Generate the default config with:
 toon config init
 ```
 
+Use a named profile:
+
+```bash
+toon --profile fast codex --prompt-file prompt.txt -- --model gpt-5.4
+```
+
 Token estimation modes:
 
 - `token_estimator = "auto"`: use `tiktoken` if installed, else heuristic fallback
@@ -131,6 +146,23 @@ Install tokenizer support:
 ```bash
 pip install "toonprompt[tokenizers]"
 ```
+
+## Environment overrides
+
+ToonPrompt supports runtime overrides through `TOON_*` variables:
+
+- `TOON_MODE`
+- `TOON_FAIL_STRATEGY`
+- `TOON_PREVIEW` (`always` / `on-demand` / `never`, or boolean aliases)
+- `TOON_LOGGING` (`local-minimal` / `none`, or boolean aliases)
+- `TOON_REDACTION`
+- `TOON_FORMAT`
+- `TOON_TOKEN_ESTIMATOR`
+- `TOON_TOKENIZER_MODEL`
+- `TOON_LOCAL_METRICS`
+- `TOON_MAX_INPUT_BYTES`
+
+Environment values override global and project config files.
 
 ## Current limitations
 

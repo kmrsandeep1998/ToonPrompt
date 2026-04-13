@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 import json
 
@@ -17,6 +18,8 @@ class MetricsSummary:
     pass_through: int
     estimated_token_delta_total: int
     pass_through_reasons: dict[str, int]
+    by_tool: dict[str, dict[str, int]]
+    daily: dict[str, dict[str, int]]
 
 
 class LocalMetricsStore:
@@ -30,14 +33,31 @@ class LocalMetricsStore:
         input_tokens: int,
         output_tokens: int,
         reason: str,
+        tool: str = "unknown",
+        ts: datetime | None = None,
     ) -> None:
         payload = self._load()
+        safe_tool = tool.strip() if isinstance(tool, str) and tool.strip() else "unknown"
+        date_key = (ts or datetime.now(timezone.utc)).date().isoformat()
+        delta = input_tokens - output_tokens
+
         payload["transforms_attempted"] += 1
+        _ensure_counter_block(payload["by_tool"], safe_tool)
+        _ensure_counter_block(payload["daily"], date_key)
+        payload["by_tool"][safe_tool]["attempted"] += 1
+        payload["daily"][date_key]["attempted"] += 1
+
         if transformed:
             payload["transforms_applied"] += 1
-            payload["estimated_token_delta_total"] += input_tokens - output_tokens
+            payload["estimated_token_delta_total"] += delta
+            payload["by_tool"][safe_tool]["applied"] += 1
+            payload["by_tool"][safe_tool]["delta"] += delta
+            payload["daily"][date_key]["applied"] += 1
+            payload["daily"][date_key]["delta"] += delta
         else:
             payload["pass_through"] += 1
+            payload["by_tool"][safe_tool]["pass_through"] += 1
+            payload["daily"][date_key]["pass_through"] += 1
             payload["pass_through_reasons"][reason] = payload["pass_through_reasons"].get(reason, 0) + 1
         self._write(payload)
 
@@ -49,6 +69,8 @@ class LocalMetricsStore:
             pass_through=payload["pass_through"],
             estimated_token_delta_total=payload["estimated_token_delta_total"],
             pass_through_reasons=payload["pass_through_reasons"],
+            by_tool=payload["by_tool"],
+            daily=payload["daily"],
         )
 
     def _load(self) -> dict:
@@ -66,11 +88,14 @@ class LocalMetricsStore:
 
     def _empty_payload(self) -> dict:
         return {
+            "schema_version": 2,
             "transforms_attempted": 0,
             "transforms_applied": 0,
             "pass_through": 0,
             "estimated_token_delta_total": 0,
             "pass_through_reasons": {},
+            "by_tool": {},
+            "daily": {},
         }
 
     def _normalize_payload(self, payload: object) -> dict:
@@ -88,4 +113,41 @@ class LocalMetricsStore:
                 if isinstance(reason, str) and isinstance(count, int) and count >= 0:
                     safe_reasons[reason] = count
             normalized["pass_through_reasons"] = safe_reasons
+        by_tool = payload.get("by_tool")
+        if isinstance(by_tool, dict):
+            normalized["by_tool"] = _normalize_counter_map(by_tool)
+        daily = payload.get("daily")
+        if isinstance(daily, dict):
+            normalized["daily"] = _normalize_counter_map(daily)
         return normalized
+
+
+def _normalize_counter_map(raw: dict[object, object]) -> dict[str, dict[str, int]]:
+    out: dict[str, dict[str, int]] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, dict):
+            continue
+        attempted = value.get("attempted")
+        applied = value.get("applied")
+        pass_through = value.get("pass_through")
+        delta = value.get("delta")
+        if not all(isinstance(item, int) for item in (attempted, applied, pass_through, delta)):
+            continue
+        if attempted < 0 or applied < 0 or pass_through < 0:
+            continue
+        out[key] = {
+            "attempted": attempted,
+            "applied": applied,
+            "pass_through": pass_through,
+            "delta": delta,
+        }
+    return out
+
+
+def _ensure_counter_block(container: dict[str, dict[str, int]], key: str) -> None:
+    current = container.get(key)
+    if isinstance(current, dict):
+        needed = {"attempted", "applied", "pass_through", "delta"}
+        if needed.issubset(current) and all(isinstance(current[field], int) for field in needed):
+            return
+    container[key] = {"attempted": 0, "applied": 0, "pass_through": 0, "delta": 0}

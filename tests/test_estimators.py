@@ -19,3 +19,11 @@ def test_auto_estimator_falls_back_when_tiktoken_unavailable() -> None:
     estimator = build_estimator(config)
     # Local test environments without tiktoken should still produce a valid estimator.
     assert estimator.estimate("hello world") > 0
+
+
+def test_auto_estimator_prefers_tool_specific_backend_with_fallback() -> None:
+    config = Config()
+    config.token_estimator = "auto"
+    config.active_adapter = "claude"
+    estimator = build_estimator(config)
+    assert estimator.estimate("hello world") > 0

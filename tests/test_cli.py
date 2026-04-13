@@ -77,3 +77,37 @@ def test_metrics_command_reports_values_when_enabled(capsys, monkeypatch, tmp_pa
     assert inspect_code == 0
     assert metrics_code == 0
     assert "Transforms attempted: 1" in captured.out
+
+
+def test_dry_run_does_not_execute_adapter(capsys) -> None:
+    prompt = '{"nodes":[{"id":1,"name":"Node 1"}]}'
+    with patch("toonprompt.cli.run_adapter") as run_adapter:
+        code = main(["codex", "--prompt", prompt, "--dry-run", "--", "--model", "gpt-5.4"])
+    captured = capsys.readouterr()
+    assert code == 0
+    run_adapter.assert_not_called()
+    assert "dry-run" in captured.out.lower()
+
+
+def test_metrics_json_output(capsys, monkeypatch, tmp_path: Path) -> None:
+    config_home = tmp_path / "config_home"
+    state_home = tmp_path / "state_home"
+    cfg = config_home / "toonprompt" / "config.toml"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text("local_metrics_enabled = true\n")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    main(["inspect", "--prompt", '{"id":1}'])
+    code = main(["metrics", "--json"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert '"transforms_attempted"' in captured.out
+
+
+def test_check_subcommand_fails_on_large_prompt(capsys, tmp_path: Path) -> None:
+    prompt_path = tmp_path / "prompt.txt"
+    prompt_path.write_text('{"nodes":[{"id":1,"name":"A very long name value for token budget test"}]}')
+    code = main(["check", "--max-tokens", "1", str(prompt_path)])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "exceeds budget" in captured.err
