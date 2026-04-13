@@ -22,6 +22,9 @@ logging = "local-minimal"
 learning_explanations = true
 redaction = true
 toon_format = "1"
+token_estimator = "auto"
+tokenizer_model = "gpt-5.3-codex"
+local_metrics_enabled = false
 
 [limits]
 max_input_bytes = 262144
@@ -53,6 +56,9 @@ class Config:
     learning_explanations: bool = True
     redaction: bool = True
     toon_format: str = "1"
+    token_estimator: str = "auto"
+    tokenizer_model: str = "gpt-5.3-codex"
+    local_metrics_enabled: bool = False
     tool_paths: dict[str, str] = field(
         default_factory=lambda: {
             "codex": "codex",
@@ -88,6 +94,9 @@ ALLOWED_ROOT_KEYS = {
     "learning_explanations",
     "redaction",
     "toon_format",
+    "token_estimator",
+    "tokenizer_model",
+    "local_metrics_enabled",
     "tool_paths",
     "compression_rules",
     "limits",
@@ -134,7 +143,18 @@ def _merge_config(config: Config, raw: dict) -> Config:
     unknown_root = set(raw) - ALLOWED_ROOT_KEYS
     if unknown_root:
         raise ConfigError(f"unknown config keys: {', '.join(sorted(unknown_root))}")
-    for key in ("mode", "fail_strategy", "preview", "logging", "learning_explanations", "redaction", "toon_format"):
+    for key in (
+        "mode",
+        "fail_strategy",
+        "preview",
+        "logging",
+        "learning_explanations",
+        "redaction",
+        "toon_format",
+        "token_estimator",
+        "tokenizer_model",
+        "local_metrics_enabled",
+    ):
         if key in raw:
             setattr(config, key, raw[key])
     if "tool_paths" in raw:
@@ -162,8 +182,14 @@ def validate_config(config: Config) -> Config:
         raise ConfigError("learning_explanations must be a boolean")
     if not isinstance(config.redaction, bool):
         raise ConfigError("redaction must be a boolean")
+    if not isinstance(config.local_metrics_enabled, bool):
+        raise ConfigError("local_metrics_enabled must be a boolean")
     if not supported_format(config.toon_format):
         raise ConfigError(f"unsupported toon_format {config.toon_format}")
+    if config.token_estimator not in {"auto", "heuristic", "tiktoken"}:
+        raise ConfigError("token_estimator must be one of: auto, heuristic, tiktoken")
+    if not isinstance(config.tokenizer_model, str) or not config.tokenizer_model.strip():
+        raise ConfigError("tokenizer_model must be a non-empty string")
     for key, value in config.tool_paths.items():
         if not isinstance(value, str) or not value.strip():
             raise ConfigError(f"tool_paths.{key} must be a non-empty string")

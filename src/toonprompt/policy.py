@@ -4,9 +4,10 @@ from dataclasses import replace
 import time
 
 from .config import Config
-from .estimators import HeuristicTokenEstimator, TokenEstimator
+from .estimators import TokenEstimator, build_estimator
 from .format import supported_format
 from .logging_utils import log_event, sha256_text
+from .metrics import LocalMetricsStore
 from .models import PromptDocument, PromptSegment, SafetyDecision, SegmentType, TransformResult
 from .segment_transformers import (
     SegmentTransformer,
@@ -22,14 +23,16 @@ class TransformationPolicy:
         self,
         estimator: TokenEstimator | None = None,
         transformers: list[SegmentTransformer] | None = None,
+        metrics_store: LocalMetricsStore | None = None,
     ) -> None:
-        self.estimator = estimator or HeuristicTokenEstimator()
+        self.estimator = estimator
         self.transformers = transformers or [
             SerializerTransformer((SegmentType.JSON, SegmentType.YAML, SegmentType.LOG, SegmentType.TABLE)),
             StackTraceTransformer(),
             TreePassthroughTransformer(),
             UnsupportedPassthroughTransformer(),
         ]
+        self.metrics_store = metrics_store or LocalMetricsStore()
         self._transformer_map = {
             segment_type: transformer
             for transformer in self.transformers
@@ -37,18 +40,23 @@ class TransformationPolicy:
         }
 
     def apply(self, document: PromptDocument, config: Config) -> TransformResult:
+        estimator = self.estimator or build_estimator(config)
         original_text = document.original_text
         if not supported_format(config.toon_format):
             return self._pass_through(
                 document,
                 f"unsupported toon_format {config.toon_format}",
                 [f"Skipped rewrite because toon_format {config.toon_format} is unsupported."],
+                estimator=estimator,
+                config=config,
             )
         if len(original_text.encode("utf-8")) > config.limits["max_input_bytes"]:
             return self._pass_through(
                 document,
                 "input exceeds max_input_bytes",
                 ["Skipped rewrite because input exceeded max_input_bytes."],
+                estimator=estimator,
+                config=config,
             )
 
         started = time.perf_counter()
@@ -64,17 +72,25 @@ class TransformationPolicy:
             if updated.reason:
                 explanations.append(f"{updated.segment_type.value}: {updated.reason}")
             if (time.perf_counter() - started) * 1000 > config.limits["max_transform_time_ms"]:
-                return self._pass_through(document, "transform exceeded max_transform_time_ms", explanations)
+                return self._pass_through(
+                    document,
+                    "transform exceeded max_transform_time_ms",
+                    explanations,
+                    estimator=estimator,
+                    config=config,
+                )
 
         final_text = "".join(segment.transformed_text if segment.transformed_text is not None else segment.text for segment in segments)
-        estimated_input_tokens = self.estimator.estimate(original_text)
-        estimated_output_tokens = self.estimator.estimate(final_text)
+        estimated_input_tokens = estimator.estimate(original_text)
+        estimated_output_tokens = estimator.estimate(final_text)
 
         if transformed_any and estimated_output_tokens >= estimated_input_tokens:
             return self._pass_through(
                 PromptDocument(original_text=original_text, segments=segments),
                 "rewrite did not reduce estimated tokens",
                 explanations + ["pass-through: rewrite did not reduce estimated tokens"],
+                estimator=estimator,
+                config=config,
             )
 
         result = TransformResult(
@@ -85,9 +101,11 @@ class TransformationPolicy:
             safety=SafetyDecision("transformed" if transformed_any else "pass-through", "ok"),
             estimated_input_tokens=estimated_input_tokens,
             estimated_output_tokens=estimated_output_tokens,
+            estimator_name=estimator.name,
             explanations=explanations,
         )
         self._log_result(result, config)
+        self._record_metrics(result, config)
         return result
 
     def _transform_segment(self, segment: PromptSegment, config: Config) -> PromptSegment:
@@ -102,8 +120,15 @@ class TransformationPolicy:
             return replace(segment, reason="unsupported segment type; kept original")
         return transformer.transform(segment, config)
 
-    def _pass_through(self, document: PromptDocument, reason: str, explanations: list[str]) -> TransformResult:
-        estimated = self.estimator.estimate(document.original_text)
+    def _pass_through(
+        self,
+        document: PromptDocument,
+        reason: str,
+        explanations: list[str],
+        estimator: TokenEstimator,
+        config: Config,
+    ) -> TransformResult:
+        estimated = estimator.estimate(document.original_text)
         result = TransformResult(
             original_text=document.original_text,
             final_text=document.original_text,
@@ -112,8 +137,10 @@ class TransformationPolicy:
             safety=SafetyDecision("pass-through", reason),
             estimated_input_tokens=estimated,
             estimated_output_tokens=estimated,
+            estimator_name=estimator.name,
             explanations=explanations,
         )
+        self._record_metrics(result, config=config)
         return result
 
     def _log_result(self, result: TransformResult, config: Config) -> None:
@@ -131,6 +158,19 @@ class TransformationPolicy:
                     "segment_types": [segment.segment_type.value for segment in result.segments],
                     "transformed": result.transformed,
                 },
+            )
+        except OSError:
+            return
+
+    def _record_metrics(self, result: TransformResult, config: Config | None) -> None:
+        if config is not None and not config.local_metrics_enabled:
+            return
+        try:
+            self.metrics_store.record(
+                transformed=result.transformed,
+                input_tokens=result.estimated_input_tokens,
+                output_tokens=result.estimated_output_tokens,
+                reason=result.safety.reason,
             )
         except OSError:
             return

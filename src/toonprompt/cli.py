@@ -6,9 +6,9 @@ import sys
 
 from . import __version__
 from .adapters import resolve_adapter, run_adapter, tool_status
-from .config import default_config_path, write_default_config
+from .config import write_default_config
 from .errors import AdapterExecutionError, ConfigError, PromptInputError, ToonPromptError
-from .services import PromptProcessingService, doctor_report
+from .services import PromptProcessingService, doctor_report, metrics_report
 
 
 TOOLS = ("codex", "claude", "cursor", "gemini")
@@ -37,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     config_init.add_argument("--path", type=Path, help="custom path for config file")
 
     subparsers.add_parser("doctor", help="show installation diagnostics")
+    subparsers.add_parser("metrics", help="show local transformation metrics")
     subparsers.add_parser("version", help="print version")
     return parser
 
@@ -50,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "doctor":
             return _run_doctor()
+        if args.command == "metrics":
+            return _run_metrics()
         if args.command == "config":
             path = write_default_config(args.path)
             print(f"Wrote config to {path}")
@@ -147,6 +150,24 @@ def _format_summary(result) -> str:
     return (
         f"Action: {result.safety.action}\n"
         f"Reason: {result.safety.reason}\n"
+        f"Estimator: {result.estimator_name}\n"
         f"Estimated tokens: {result.estimated_input_tokens} -> {result.estimated_output_tokens} "
         f"(delta {delta})"
     )
+
+
+def _run_metrics() -> int:
+    config, summary = metrics_report()
+    if not config.local_metrics_enabled:
+        print("Local metrics are disabled. Set local_metrics_enabled = true in config to collect them.")
+        return 0
+    print("Local transformation metrics:")
+    print(f"- Transforms attempted: {summary.transforms_attempted}")
+    print(f"- Transforms applied: {summary.transforms_applied}")
+    print(f"- Pass-through count: {summary.pass_through}")
+    print(f"- Estimated token delta total: {summary.estimated_token_delta_total}")
+    if summary.pass_through_reasons:
+        print("- Pass-through reasons:")
+        for reason, count in sorted(summary.pass_through_reasons.items()):
+            print(f"  - {reason}: {count}")
+    return 0

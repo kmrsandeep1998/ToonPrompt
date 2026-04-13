@@ -1,0 +1,8 @@
+Investigate these API failures and summarize the cause.
+
+data:
+  errors[3]{code,message}:
+    502,upstream timeout
+    502,upstream timeout
+    502,upstream timeout
+

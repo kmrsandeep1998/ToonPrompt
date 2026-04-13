@@ -1,0 +1,25 @@
+{
+  "version": "0.1.0a2",
+  "tools": {
+    "codex": {
+      "tested_versions": ["0.120.x"],
+      "prompt_sources": ["--prompt", "--prompt-file", "--stdin"],
+      "notes": "Best-effort wrapper around native codex binary."
+    },
+    "claude": {
+      "tested_versions": ["latest"],
+      "prompt_sources": ["--prompt", "--prompt-file", "--stdin"],
+      "notes": "Structured prompt compression only; response text is not post-processed."
+    },
+    "cursor": {
+      "tested_versions": ["latest"],
+      "prompt_sources": ["--prompt", "--prompt-file", "--stdin"],
+      "notes": "Wrapper mode only; interactive TUI keystrokes are out of scope."
+    },
+    "gemini": {
+      "tested_versions": ["latest"],
+      "prompt_sources": ["--prompt", "--prompt-file", "--stdin"],
+      "notes": "Baseline adapter behavior with best-effort parity."
+    }
+  }
+}

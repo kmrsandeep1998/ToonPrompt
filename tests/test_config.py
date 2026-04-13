@@ -37,3 +37,13 @@ def test_unknown_key_raises_config_error(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
     with pytest.raises(ConfigError, match="unknown config keys"):
         load_config(cwd=tmp_path)
+
+
+def test_invalid_token_estimator_raises_config_error(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    target = config_dir / "toonprompt" / "config.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text('token_estimator = "bad-mode"\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+    with pytest.raises(ConfigError, match="token_estimator"):
+        load_config(cwd=tmp_path)

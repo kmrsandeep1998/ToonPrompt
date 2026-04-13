@@ -12,6 +12,7 @@ def test_inspect_preview(capsys) -> None:
     captured = capsys.readouterr()
     assert code == 0
     assert "Estimated tokens" in captured.out
+    assert "Estimator:" in captured.out
     assert "data:" in captured.out
 
 
@@ -52,3 +53,27 @@ def test_invalid_config_returns_clean_error(capsys, monkeypatch, tmp_path: Path)
     captured = capsys.readouterr()
     assert code == 2
     assert "unsupported toon_format 999" in captured.err
+
+
+def test_metrics_command_reports_disabled_by_default(capsys) -> None:
+    code = main(["metrics"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Local metrics are disabled" in captured.out
+
+
+def test_metrics_command_reports_values_when_enabled(capsys, monkeypatch, tmp_path: Path) -> None:
+    config_home = tmp_path / "config_home"
+    state_home = tmp_path / "state_home"
+    cfg = config_home / "toonprompt" / "config.toml"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text("local_metrics_enabled = true\n")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    prompt = '{"nodes":[{"id":1,"name":"Node 1"},{"id":2,"name":"Node 2"}]}'
+    inspect_code = main(["inspect", "--prompt", prompt])
+    metrics_code = main(["metrics"])
+    captured = capsys.readouterr()
+    assert inspect_code == 0
+    assert metrics_code == 0
+    assert "Transforms attempted: 1" in captured.out

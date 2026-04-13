@@ -5,7 +5,9 @@ from pathlib import Path
 
 from .config import Config, default_config_path, load_config
 from .detector import build_document, read_prompt
+from .estimators import estimator_status
 from .errors import PromptInputError
+from .metrics import LocalMetricsStore, MetricsSummary
 from .models import TransformResult
 from .policy import TransformationPolicy
 
@@ -32,4 +34,10 @@ class PromptProcessingService:
 
 def doctor_report(cwd: Path | None = None) -> tuple[Config, str]:
     config = load_config(cwd=cwd)
-    return config, f"Config path: {default_config_path()}"
+    return config, f"Config path: {default_config_path()}\nEstimator backend: {estimator_status(config)}"
+
+
+def metrics_report(cwd: Path | None = None) -> tuple[Config, MetricsSummary]:
+    config = load_config(cwd=cwd)
+    summary = LocalMetricsStore().summary()
+    return config, summary

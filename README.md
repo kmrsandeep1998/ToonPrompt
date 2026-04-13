@@ -62,6 +62,12 @@ Run diagnostics:
 toon doctor
 ```
 
+Show local metrics (opt-in):
+
+```bash
+toon metrics
+```
+
 ## Supported prompt sources
 
 - `--prompt` for inline text
@@ -114,6 +120,18 @@ Generate the default config with:
 toon config init
 ```
 
+Token estimation modes:
+
+- `token_estimator = "auto"`: use `tiktoken` if installed, else heuristic fallback
+- `token_estimator = "heuristic"`: always use lightweight character-based estimate
+- `token_estimator = "tiktoken"`: prefer tokenizer backend, fallback to heuristic if unavailable
+
+Install tokenizer support:
+
+```bash
+pip install "toonprompt[tokenizers]"
+```
+
 ## Current limitations
 
 - best-effort parity across tools, not identical behavior
@@ -125,10 +143,10 @@ toon config init
 
 | Tool | Invocation style | Prompt sources | Notes |
 |---|---|---|---|
-| Codex CLI | `toon codex -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Best-effort wrapper around the native binary. |
-| Claude CLI | `toon claude -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Structured prompt compression only; no response rewriting. |
-| Cursor CLI | `toon cursor -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Wrapper mode only; interactive TUI keystrokes are not intercepted. |
-| Gemini CLI | `toon gemini -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Same baseline behavior as other adapters. |
+| Codex CLI | `toon codex -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Best-effort wrapper around the native binary; release workflow coverage targets Python 3.9-3.12. |
+| Claude CLI | `toon claude -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Structured prompt compression only; no response rewriting; release workflow coverage targets Python 3.9-3.12. |
+| Cursor CLI | `toon cursor -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Wrapper mode only; interactive TUI keystrokes are not intercepted; release workflow coverage targets Python 3.9-3.12. |
+| Gemini CLI | `toon gemini -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Same baseline behavior as other adapters; release workflow coverage targets Python 3.9-3.12. |
 
 ## Toon Format Versioning
 
@@ -155,6 +173,8 @@ Run the fixture benchmark script with:
 ```bash
 PYTHONPATH=src python3 scripts/benchmark_fixtures.py
 ```
+
+Token deltas in alpha are still **estimates** and should be interpreted as directional, not billing-accurate.
 
 ## Development
 
