@@ -9,12 +9,14 @@ import difflib
 
 from . import __version__
 from .adapters import resolve_adapter, run_adapter, tool_status
+from .audit import read_audit
 from .config import write_default_config
 from .errors import AdapterExecutionError, ConfigError, PromptInputError, ToonPromptError
+from .output import print_summary
 from .services import PromptProcessingService, doctor_report, metrics_report
 
 
-TOOLS = ("codex", "claude", "cursor", "gemini")
+TOOLS = ("codex", "claude", "cursor", "gemini", "aider", "continue")
 logger = logging.getLogger("toonprompt")
 
 
@@ -29,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
         tool_parser = subparsers.add_parser(tool, help=f"proxy {tool}")
         _add_prompt_args(tool_parser)
         tool_parser.add_argument("--dry-run", action="store_true", help="Print transformed prompt and exit.")
+        tool_parser.add_argument("--async", action="store_true", dest="async_mode", help=argparse.SUPPRESS)
         tool_parser.add_argument("--preview", action="store_true", help="show original and transformed prompt")
         tool_parser.add_argument("--explain", action="store_true", help="show transform explanations")
         tool_parser.add_argument("--print-final-prompt", action="store_true", help="print final prompt and exit")
@@ -37,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_parser = subparsers.add_parser("inspect", help="inspect a prompt without invoking a native CLI")
     _add_prompt_args(inspect_parser)
     inspect_parser.add_argument("--dry-run", action="store_true", help="Print transformed prompt and exit.")
+    inspect_parser.add_argument("--async", action="store_true", dest="async_mode", help=argparse.SUPPRESS)
     inspect_parser.add_argument("--preview", action="store_true", help="show original and transformed prompt")
     inspect_parser.add_argument("--explain", action="store_true", help="show transform explanations")
     inspect_parser.add_argument("--diff", action="store_true", help="Show line-by-line diff.")
@@ -51,6 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("doctor", help="show installation diagnostics")
     metrics_parser = subparsers.add_parser("metrics", help="show local transformation metrics")
     metrics_parser.add_argument("--json", action="store_true", dest="metrics_json", help="Output metrics as JSON.")
+    audit_parser = subparsers.add_parser("audit", help="query local audit records")
+    audit_parser.add_argument("--tail", type=int, default=50, help="Number of latest records to show.")
+    audit_parser.add_argument("--since", dest="since_prefix", help="Timestamp prefix filter (e.g. 2026-04).")
+    audit_parser.add_argument("--tool", choices=TOOLS, help="Filter by tool.")
+    audit_parser.add_argument("--json", action="store_true", dest="audit_json", help="Output JSON records.")
     check_parser = subparsers.add_parser("check", help="check token budget for prompt files")
     check_parser.add_argument("--max-tokens", type=int, required=True, help="Maximum allowed estimated tokens.")
     check_parser.add_argument("files", nargs="+", help="Prompt files to validate.")
@@ -70,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run_doctor(profile=args.profile)
         if args.command == "metrics":
             return _run_metrics(args, profile=args.profile)
+        if args.command == "audit":
+            return _run_audit(args, profile=args.profile)
         if args.command == "check":
             return _run_check(args, profile=args.profile)
         if args.command == "config":
@@ -110,9 +121,17 @@ def _add_prompt_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_inspect(args: argparse.Namespace, profile: str) -> int:
-    processed = PromptProcessingService().process(args.prompt, args.prompt_file, args.stdin, profile=profile)
+    service = PromptProcessingService()
+    if args.async_mode:
+        import asyncio
+
+        processed = asyncio.run(service.process_async(args.prompt, args.prompt_file, args.stdin, profile=profile))
+    else:
+        processed = service.process(args.prompt, args.prompt_file, args.stdin, profile=profile)
     config = processed.config
     result = processed.result
+    input_size = len(result.original_text.encode("utf-8"))
+    segment_stats = _segment_stats(result)
     if args.format == "json":
         print(
             json.dumps(
@@ -123,13 +142,15 @@ def _run_inspect(args: argparse.Namespace, profile: str) -> int:
                     "estimated_input_tokens": result.estimated_input_tokens,
                     "estimated_output_tokens": result.estimated_output_tokens,
                     "delta": result.estimated_input_tokens - result.estimated_output_tokens,
+                    "input_bytes": input_size,
+                    "segments": segment_stats,
                     "transformed": result.final_text,
                 },
                 indent=2,
             )
         )
     else:
-        print(_format_summary(result, markdown=(args.format == "markdown")))
+        print(_format_inspect_summary(result, segment_stats, input_size, markdown=(args.format == "markdown")))
     if args.explain or config.learning_explanations:
         print("\nExplanations:")
         for line in result.explanations:
@@ -167,11 +188,19 @@ def _run_inspect(args: argparse.Namespace, profile: str) -> int:
 
 
 def _run_tool(tool: str, args: argparse.Namespace, profile: str) -> int:
-    processed = PromptProcessingService().process(args.prompt, args.prompt_file, args.stdin, profile=profile, tool=tool)
+    service = PromptProcessingService()
+    if args.async_mode:
+        import asyncio
+
+        processed = asyncio.run(
+            service.process_async(args.prompt, args.prompt_file, args.stdin, profile=profile, tool=tool)
+        )
+    else:
+        processed = service.process(args.prompt, args.prompt_file, args.stdin, profile=profile, tool=tool)
     config = processed.config
     result = processed.result
     if args.preview:
-        print(_format_summary(result), file=sys.stderr)
+        print_summary(result, stream=sys.stderr)
         print("\nTransformed prompt:\n", file=sys.stderr)
         print(result.final_text, file=sys.stderr)
     if args.explain:
@@ -239,6 +268,43 @@ def _format_summary(result, markdown: bool = False) -> str:
     )
 
 
+def _format_inspect_summary(result, segment_stats: dict[str, int], input_bytes: int, markdown: bool = False) -> str:
+    delta = result.estimated_input_tokens - result.estimated_output_tokens
+    seg_count = len(result.segments)
+    seg_parts = ", ".join(f"{count} {name}" for name, count in sorted(segment_stats.items())) or "0"
+    if markdown:
+        return (
+            "### ToonPrompt Inspection\n"
+            f"- Size: `{input_bytes}` bytes\n"
+            f"- Segments: `{seg_count}` ({seg_parts})\n"
+            f"- Action: `{result.safety.action}`\n"
+            f"- Reason: `{result.safety.reason}`\n"
+            f"- Estimator: `{result.estimator_name}`\n"
+            f"- Estimated input tokens: `{result.estimated_input_tokens}`\n"
+            f"- Estimated output tokens: `{result.estimated_output_tokens}`\n"
+            f"- Delta: `{delta}`\n"
+        )
+    return (
+        "=== ToonPrompt Inspection ===\n"
+        f"Size            : {input_bytes} bytes\n"
+        f"Segments        : {seg_count} ({seg_parts})\n"
+        f"Estimator       : {result.estimator_name}\n"
+        f"Est. input      : {result.estimated_input_tokens}\n"
+        f"Est. output     : {result.estimated_output_tokens}\n"
+        f"Delta           : {delta}\n"
+        f"Action          : {result.safety.action}\n"
+        f"Reason          : {result.safety.reason}"
+    )
+
+
+def _segment_stats(result) -> dict[str, int]:
+    stats: dict[str, int] = {}
+    for segment in result.segments:
+        key = segment.segment_type.value.upper()
+        stats[key] = stats.get(key, 0) + 1
+    return stats
+
+
 def _run_metrics(args: argparse.Namespace, profile: str) -> int:
     config, summary = metrics_report(profile=profile)
     if not config.local_metrics_enabled:
@@ -273,6 +339,35 @@ def _run_metrics(args: argparse.Namespace, profile: str) -> int:
         print("- By tool:")
         for tool, data in sorted(summary.by_tool.items()):
             print(f"  - {tool}: {data['applied']} applied / {data['attempted']} attempted (delta {data['delta']})")
+    if summary.daily:
+        print("- Daily:")
+        for day, data in sorted(summary.daily.items()):
+            print(f"  - {day}: {data['applied']} applied / {data['attempted']} attempted (delta {data['delta']})")
+    return 0
+
+
+def _run_audit(args: argparse.Namespace, profile: str) -> int:
+    config, _ = doctor_report(profile=profile)
+    records = read_audit(
+        config,
+        tail=args.tail,
+        since_prefix=args.since_prefix,
+        tool=args.tool,
+    )
+    if args.audit_json:
+        for row in records:
+            print(json.dumps(row, sort_keys=True))
+        return 0
+    if not records:
+        print("No audit records found.")
+        return 0
+    print(f"Audit records ({len(records)}):")
+    for row in records:
+        print(
+            f"- {row.get('ts')} {row.get('tool')} {row.get('action')} "
+            f"in={row.get('input_tokens_est')} out={row.get('output_tokens_est')} "
+            f"reason={row.get('reason')}"
+        )
     return 0
 
 

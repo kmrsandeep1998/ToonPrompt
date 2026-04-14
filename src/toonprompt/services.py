@@ -40,6 +40,25 @@ class PromptProcessingService:
         document = build_document(text)
         return ProcessedPrompt(config=config, result=self.policy.apply(document, config, tool=tool))
 
+    async def process_async(
+        self,
+        prompt: str | None,
+        prompt_file: Path | None,
+        use_stdin: bool,
+        cwd: Path | None = None,
+        profile: str = "default",
+        tool: str = "",
+    ) -> ProcessedPrompt:
+        config = load_config(cwd=cwd, profile=profile)
+        config.active_adapter = tool
+        try:
+            text = read_prompt(prompt, prompt_file, use_stdin)
+        except (OSError, ValueError) as exc:
+            raise PromptInputError(str(exc)) from exc
+        document = build_document(text)
+        result = await self.policy.run_async(document, config, tool=tool)
+        return ProcessedPrompt(config=config, result=result)
+
 
 def doctor_report(cwd: Path | None = None, profile: str = "default") -> tuple[Config, str]:
     config = load_config(cwd=cwd, profile=profile)

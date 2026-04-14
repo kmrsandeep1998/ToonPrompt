@@ -50,6 +50,8 @@ toon codex --prompt-file prompt.txt -- --model gpt-5.4
 toon codex --prompt-file prompt.txt --dry-run
 printf '%s\n' '{"id":1,"name":"node"}' | toon claude --stdin -- --print
 toon-cursor --prompt "Explain this stack trace" -- --help
+toon aider --prompt-file prompt.txt -- --model sonnet
+toon continue --prompt "Summarize this error context"
 ```
 
 Initialize config:
@@ -69,6 +71,8 @@ Show local metrics (opt-in):
 ```bash
 toon metrics
 toon metrics --json
+toon audit --tail 20
+toon audit --tool codex --since 2026-04 --json
 ```
 
 Validate prompt files against a token budget:
@@ -169,7 +173,7 @@ Environment values override global and project config files.
 - best-effort parity across tools, not identical behavior
 - response text is not post-processed
 - interactive native TUI input is not intercepted
-- Windows support is deferred
+- Aider and Continue adapters are wrapper-mode baseline integrations
 
 ## Compatibility Matrix
 
@@ -179,6 +183,8 @@ Environment values override global and project config files.
 | Claude CLI | `toon claude -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Structured prompt compression only; no response rewriting; release workflow coverage targets Python 3.9-3.12. |
 | Cursor CLI | `toon cursor -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Wrapper mode only; interactive TUI keystrokes are not intercepted; release workflow coverage targets Python 3.9-3.12. |
 | Gemini CLI | `toon gemini -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Same baseline behavior as other adapters; release workflow coverage targets Python 3.9-3.12. |
+| Aider CLI | `toon aider -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Wrapper-mode integration for initial prompt compression before native execution. |
+| Continue CLI | `toon continue -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Wrapper-mode integration for CLI-based Continue workflows. |
 
 ## Toon Format Versioning
 
@@ -222,3 +228,20 @@ Useful repo docs:
 - [Contributing](./CONTRIBUTING.md)
 - [Security](./SECURITY.md)
 - [Releasing](./docs/RELEASING.md)
+- [Docs site config](./mkdocs.yml)
+
+## Python SDK
+
+```python
+from toonprompt import ToonPrompt
+
+client = ToonPrompt(profile="default")
+result = client.transform('{"id":1,"name":"node"}')
+print(result.output)
+```
+
+## Distribution
+
+- PyPI package: `pip install toonprompt`
+- pipx: `pipx install toonprompt`
+- Dockerfile included for containerized CLI usage

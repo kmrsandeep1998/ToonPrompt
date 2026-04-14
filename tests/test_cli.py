@@ -11,8 +11,8 @@ def test_inspect_preview(capsys) -> None:
     code = main(["inspect", "--prompt", prompt, "--preview"])
     captured = capsys.readouterr()
     assert code == 0
-    assert "Estimated tokens" in captured.out
-    assert "Estimator:" in captured.out
+    assert "=== ToonPrompt Inspection ===" in captured.out
+    assert "Estimator" in captured.out
     assert "data:" in captured.out
 
 
@@ -111,3 +111,10 @@ def test_check_subcommand_fails_on_large_prompt(capsys, tmp_path: Path) -> None:
     captured = capsys.readouterr()
     assert code == 1
     assert "exceeds budget" in captured.err
+
+
+def test_audit_command_outputs_empty_state(capsys) -> None:
+    code = main(["audit", "--tail", "5"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "No audit records found." in captured.out

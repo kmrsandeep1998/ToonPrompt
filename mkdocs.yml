@@ -1,0 +1,17 @@
+site_name: ToonPrompt
+site_url: https://kmrsandeep1998.github.io/ToonPrompt/
+repo_url: https://github.com/kmrsandeep1998/ToonPrompt
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Quick Start: quickstart.md
+  - Configuration: configuration.md
+  - SDK: sdk.md
+  - CLI Reference: cli-reference.md
+  - Enterprise:
+      - Audit logging: enterprise/audit.md
+      - Profiles: enterprise/profiles.md
+      - OpenTelemetry: enterprise/otel.md
+  - Redaction: REDACTION.md
+  - Releasing: RELEASING.md

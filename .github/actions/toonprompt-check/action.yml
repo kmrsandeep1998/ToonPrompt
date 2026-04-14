@@ -1,0 +1,23 @@
+name: ToonPrompt Token Budget Check
+description: Fail if prompt files exceed token budget.
+inputs:
+  max-tokens:
+    description: Maximum allowed tokens per prompt file.
+    default: "4096"
+  files:
+    description: Glob pattern for prompt files.
+    default: "**/*.prompt"
+runs:
+  using: composite
+  steps:
+    - run: pip install toonprompt
+      shell: bash
+    - run: |
+        set -euo pipefail
+        mapfile -t files < <(find . -name "*.prompt")
+        if [ "${#files[@]}" -eq 0 ]; then
+          echo "No .prompt files found."
+          exit 0
+        fi
+        toon check --max-tokens "${{ inputs.max-tokens }}" "${files[@]}"
+      shell: bash

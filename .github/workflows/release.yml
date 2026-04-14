@@ -21,6 +21,16 @@ jobs:
       - run: python -m pip install --upgrade pip build twine
       - run: python -m build
       - run: twine check dist/*
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: dist/
+          output-file: sbom.spdx.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: toonprompt-sbom
+          path: sbom.spdx.json
       - uses: actions/upload-artifact@v4
         with:
           name: toonprompt-dist

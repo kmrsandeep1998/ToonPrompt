@@ -28,6 +28,8 @@ token_estimator = "auto"
 tokenizer_model = "gpt-5.3-codex"
 local_metrics_enabled = false
 otel_enabled = false
+otel_endpoint = ""
+otel_service_name = "toonprompt"
 audit_log_enabled = false
 audit_log_path = ""
 audit_log_max_bytes = 10485760
@@ -43,6 +45,8 @@ codex = "codex"
 claude = "claude"
 cursor = "cursor-agent"
 gemini = "gemini"
+aider = "aider"
+continue = "continue"
 
 [compression_rules]
 json = true
@@ -70,6 +74,8 @@ class Config:
     tokenizer_model: str = "gpt-5.3-codex"
     local_metrics_enabled: bool = False
     otel_enabled: bool = False
+    otel_endpoint: str = ""
+    otel_service_name: str = "toonprompt"
     audit_log_enabled: bool = False
     audit_log_path: str = ""
     audit_log_max_bytes: int = 10485760
@@ -82,6 +88,8 @@ class Config:
             "claude": "claude",
             "cursor": "cursor-agent",
             "gemini": "gemini",
+            "aider": "aider",
+            "continue": "continue",
         }
     )
     compression_rules: dict[str, bool] = field(
@@ -117,6 +125,8 @@ ALLOWED_ROOT_KEYS = {
     "tokenizer_model",
     "local_metrics_enabled",
     "otel_enabled",
+    "otel_endpoint",
+    "otel_service_name",
     "audit_log_enabled",
     "audit_log_path",
     "audit_log_max_bytes",
@@ -129,7 +139,7 @@ ALLOWED_ROOT_KEYS = {
 }
 
 ALLOWED_SECTION_KEYS = {
-    "tool_paths": {"codex", "claude", "cursor", "gemini"},
+    "tool_paths": {"codex", "claude", "cursor", "gemini", "aider", "continue"},
     "compression_rules": {"json", "yaml", "logs", "stacktraces", "trees", "tables"},
     "limits": {"max_input_bytes", "max_transform_time_ms", "max_depth"},
 }
@@ -154,9 +164,9 @@ def default_state_dir() -> Path:
     return Path(base) / "toonprompt"
 
 
-def load_config(cwd: Path | None = None, profile: str | None = None) -> Config:
+def load_config(path: Path | None = None, cwd: Path | None = None, profile: str | None = None) -> Config:
     config = Config()
-    config_path = default_config_path()
+    config_path = path or default_config_path()
     if config_path.exists():
         config = _merge_config(config, _loads_toml(config_path.read_text(), source=str(config_path)))
     if cwd is None:
@@ -190,6 +200,8 @@ def apply_env_overrides(config: Config) -> Config:
         "TOON_TOKENIZER_MODEL": ("tokenizer_model", str),
         "TOON_LOCAL_METRICS": ("local_metrics_enabled", _parse_bool),
         "TOON_OTEL_ENABLED": ("otel_enabled", _parse_bool),
+        "TOON_OTEL_ENDPOINT": ("otel_endpoint", str),
+        "TOON_OTEL_SERVICE_NAME": ("otel_service_name", str),
     }
     for env_key, (field_name, coerce) in mapping.items():
         raw = os.environ.get(env_key)
@@ -230,6 +242,8 @@ def _merge_config(config: Config, raw: dict) -> Config:
         "tokenizer_model",
         "local_metrics_enabled",
         "otel_enabled",
+        "otel_endpoint",
+        "otel_service_name",
         "audit_log_enabled",
         "audit_log_path",
         "audit_log_max_bytes",
@@ -288,6 +302,10 @@ def validate_config(config: Config) -> Config:
         raise ConfigError("local_metrics_enabled must be a boolean")
     if not isinstance(config.otel_enabled, bool):
         raise ConfigError("otel_enabled must be a boolean")
+    if not isinstance(config.otel_endpoint, str):
+        raise ConfigError("otel_endpoint must be a string")
+    if not isinstance(config.otel_service_name, str) or not config.otel_service_name.strip():
+        raise ConfigError("otel_service_name must be a non-empty string")
     if not isinstance(config.audit_log_enabled, bool):
         raise ConfigError("audit_log_enabled must be a boolean")
     if not isinstance(config.audit_log_path, str):

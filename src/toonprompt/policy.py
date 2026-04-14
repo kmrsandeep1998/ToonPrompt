@@ -123,6 +123,11 @@ class TransformationPolicy:
         self._write_audit(result, config, tool=active_tool, duration_ms=elapsed_ms)
         return result
 
+    async def run_async(self, document: PromptDocument, config: Config, tool: str = "") -> TransformResult:
+        import asyncio
+
+        return await asyncio.to_thread(self.apply, document, config, tool)
+
     def _transform_segment(
         self,
         segment: PromptSegment,

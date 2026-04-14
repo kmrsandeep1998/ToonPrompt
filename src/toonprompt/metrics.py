@@ -6,6 +6,7 @@ from pathlib import Path
 import json
 
 from .config import default_state_dir
+from .errors import ConfigError
 
 
 METRICS_FILENAME = "metrics.json"
@@ -25,7 +26,7 @@ class MetricsSummary:
 class LocalMetricsStore:
     def __init__(self, state_dir: Path | None = None) -> None:
         self.state_dir = state_dir or default_state_dir()
-        self.path = self.state_dir / METRICS_FILENAME
+        self.path = _safe_metrics_path(self.state_dir / METRICS_FILENAME)
 
     def record(
         self,
@@ -151,3 +152,23 @@ def _ensure_counter_block(container: dict[str, dict[str, int]], key: str) -> Non
         if needed.issubset(current) and all(isinstance(current[field], int) for field in needed):
             return
     container[key] = {"attempted": 0, "applied": 0, "pass_through": 0, "delta": 0}
+
+
+def _safe_metrics_path(path: Path) -> Path:
+    try:
+        resolved = path.expanduser().resolve()
+    except OSError as exc:
+        raise ConfigError(f"invalid metrics path {path!s}: {exc}") from exc
+    home = Path.home().resolve()
+    allow_prefixes = [home, Path("/tmp"), Path("/private/var")]
+    if not any(_is_within(resolved, base) for base in allow_prefixes):
+        raise ConfigError(f"metrics path {path!s} must be within user-writable safe directories")
+    return resolved
+
+
+def _is_within(target: Path, base: Path) -> bool:
+    try:
+        target.relative_to(base.resolve())
+        return True
+    except ValueError:
+        return False

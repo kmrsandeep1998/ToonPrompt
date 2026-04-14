@@ -17,7 +17,8 @@ def emit_transform_span(
         return
     try:
         from opentelemetry import trace  # type: ignore
-        tracer = trace.get_tracer("toonprompt")
+
+        tracer = trace.get_tracer(getattr(config, "otel_service_name", "toonprompt"))
         with tracer.start_as_current_span("toonprompt.transform") as span:
             span.set_attribute("toon.tool", tool or "unknown")
             span.set_attribute("toon.action", action)
@@ -26,5 +27,8 @@ def emit_transform_span(
             span.set_attribute("toon.output_tokens", output_tokens)
             span.set_attribute("toon.delta_tokens", output_tokens - input_tokens)
             span.set_attribute("toon.segment_type", segment_type)
+            endpoint = getattr(config, "otel_endpoint", "")
+            if endpoint:
+                span.set_attribute("toon.otel_endpoint", endpoint)
     except Exception:
         return

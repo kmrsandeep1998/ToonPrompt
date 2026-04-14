@@ -20,6 +20,16 @@
       "tested_versions": ["latest"],
       "prompt_sources": ["--prompt", "--prompt-file", "--stdin"],
       "notes": "Baseline adapter behavior with best-effort parity."
+    },
+    "aider": {
+      "tested_versions": ["latest"],
+      "prompt_sources": ["--prompt", "--prompt-file", "--stdin"],
+      "notes": "Aider adapter in wrapper mode for initial prompt compression."
+    },
+    "continue": {
+      "tested_versions": ["latest"],
+      "prompt_sources": ["--prompt", "--prompt-file", "--stdin"],
+      "notes": "Continue CLI adapter in wrapper mode."
     }
   }
 }

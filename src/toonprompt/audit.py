@@ -6,10 +6,16 @@ import hashlib
 import json
 import uuid
 
-from . import __version__
 from .config import Config, default_state_dir
 
 _SESSION_ID = str(uuid.uuid4())
+
+try:
+    from importlib.metadata import version as _pkg_version
+
+    _VERSION = _pkg_version("toonprompt")
+except Exception:  # pragma: no cover
+    _VERSION = "0.0.0"
 
 
 def write_audit_record(
@@ -29,7 +35,7 @@ def write_audit_record(
     path = _audit_path(config)
     record = {
         "ts": datetime.now(timezone.utc).isoformat(),
-        "version": __version__,
+        "version": _VERSION,
         "tool": tool or "unknown",
         "action": action,
         "reason": reason,

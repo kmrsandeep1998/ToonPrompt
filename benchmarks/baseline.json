@@ -1,0 +1,20 @@
+{
+  "fixtures": {
+    "mixed_prompt": {
+      "delta_pct": -17.07,
+      "input_tokens": 41.0,
+      "output_tokens": 34.0
+    },
+    "nested_nodes": {
+      "delta_pct": 0.0,
+      "input_tokens": 49.0,
+      "output_tokens": 49.0
+    },
+    "repeated_logs": {
+      "delta_pct": -84.09,
+      "input_tokens": 44.0,
+      "output_tokens": 7.0
+    }
+  },
+  "version": "0.1.0a2"
+}

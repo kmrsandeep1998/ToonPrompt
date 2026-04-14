@@ -1,0 +1,7 @@
+- id: toon-check
+  name: ToonPrompt token budget check
+  description: Fail if any prompt file exceeds configured token limit.
+  language: python
+  entry: toon check
+  files: \.(txt|md|prompt)$
+  args: ["--max-tokens", "4096"]
