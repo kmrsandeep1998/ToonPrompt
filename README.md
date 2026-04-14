@@ -228,6 +228,7 @@ Useful repo docs:
 - [Contributing](./CONTRIBUTING.md)
 - [Security](./SECURITY.md)
 - [Releasing](./docs/RELEASING.md)
+- [Operations](./docs/OPERATIONS.md)
 - [Docs site config](./mkdocs.yml)
 
 ## Python SDK
@@ -252,3 +253,4 @@ print(result.output)
 - Homebrew tap auto-bump workflow: [`.github/workflows/homebrew-tap.yml`](./.github/workflows/homebrew-tap.yml)
 - VS Code extension starter: [`integrations/vscode/toonprompt-vscode`](./integrations/vscode/toonprompt-vscode)
 - GitHub Action composite check: [`.github/actions/toonprompt-check/action.yml`](./.github/actions/toonprompt-check/action.yml)
+- Standalone action scaffold: [`integrations/github-action/toonprompt-check`](./integrations/github-action/toonprompt-check)
