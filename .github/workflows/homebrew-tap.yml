@@ -19,7 +19,7 @@ jobs:
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           URL="https://github.com/kmrsandeep1998/ToonPrompt/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
-          SHA="$(curl -L -sS "$URL" | sha256sum | awk '{print $1}')"
+          SHA="$(curl -fL -sS "$URL" | sha256sum | awk '{print $1}')"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
       - name: Generate formula for this release
