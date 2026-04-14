@@ -1,0 +1,5 @@
+Investigate these API failures and summarize the cause.
+
+```json
+{"errors":[{"code":502,"message":"upstream timeout"},{"code":502,"message":"upstream timeout"},{"code":502,"message":"upstream timeout"}]}
+```

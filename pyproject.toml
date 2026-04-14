@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toonprompt"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "Universal prompt optimization wrapper for coding CLIs that compresses structured context into Toon-style blocks."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -39,9 +39,22 @@ Documentation = "https://github.com/kmrsandeep1998/ToonPrompt/blob/main/README.m
 [project.optional-dependencies]
 dev = [
   "build>=1.0",
+  "hypothesis>=6.100",
+  "mypy>=1.10",
   "pre-commit>=3.0",
   "pytest>=8.0",
+  "ruff>=0.4",
   "twine>=5.0"
+]
+tokenizers = [
+  "tiktoken>=0.7.0"
+]
+rich = [
+  "rich>=13.0"
+]
+docs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5"
 ]
 
 [project.scripts]
@@ -59,3 +72,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "integration: end-to-end tests that spawn real subprocesses",
+]

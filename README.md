@@ -40,14 +40,18 @@ Inspect a prompt without calling a native CLI:
 
 ```bash
 toon inspect --prompt-file prompt.txt --preview --explain
+toon inspect --prompt-file prompt.txt --dry-run --diff --format markdown
 ```
 
 Proxy a supported CLI:
 
 ```bash
 toon codex --prompt-file prompt.txt -- --model gpt-5.4
+toon codex --prompt-file prompt.txt --dry-run
 printf '%s\n' '{"id":1,"name":"node"}' | toon claude --stdin -- --print
 toon-cursor --prompt "Explain this stack trace" -- --help
+toon aider --prompt-file prompt.txt -- --model sonnet
+toon continue --prompt "Summarize this error context"
 ```
 
 Initialize config:
@@ -60,6 +64,21 @@ Run diagnostics:
 
 ```bash
 toon doctor
+```
+
+Show local metrics (opt-in):
+
+```bash
+toon metrics
+toon metrics --json
+toon audit --tail 20
+toon audit --tool codex --since 2026-04 --json
+```
+
+Validate prompt files against a token budget:
+
+```bash
+toon check --max-tokens 12000 prompts/*.txt
 ```
 
 ## Supported prompt sources
@@ -114,21 +133,58 @@ Generate the default config with:
 toon config init
 ```
 
+Use a named profile:
+
+```bash
+toon --profile fast codex --prompt-file prompt.txt -- --model gpt-5.4
+```
+
+Token estimation modes:
+
+- `token_estimator = "auto"`: use `tiktoken` if installed, else heuristic fallback
+- `token_estimator = "heuristic"`: always use lightweight character-based estimate
+- `token_estimator = "tiktoken"`: prefer tokenizer backend, fallback to heuristic if unavailable
+
+Install tokenizer support:
+
+```bash
+pip install "toonprompt[tokenizers]"
+```
+
+## Environment overrides
+
+ToonPrompt supports runtime overrides through `TOON_*` variables:
+
+- `TOON_MODE`
+- `TOON_FAIL_STRATEGY`
+- `TOON_PREVIEW` (`always` / `on-demand` / `never`, or boolean aliases)
+- `TOON_LOGGING` (`local-minimal` / `none`, or boolean aliases)
+- `TOON_REDACTION`
+- `TOON_FORMAT`
+- `TOON_TOKEN_ESTIMATOR`
+- `TOON_TOKENIZER_MODEL`
+- `TOON_LOCAL_METRICS`
+- `TOON_MAX_INPUT_BYTES`
+
+Environment values override global and project config files.
+
 ## Current limitations
 
 - best-effort parity across tools, not identical behavior
 - response text is not post-processed
 - interactive native TUI input is not intercepted
-- Windows support is deferred
+- Aider and Continue adapters are wrapper-mode baseline integrations
 
 ## Compatibility Matrix
 
 | Tool | Invocation style | Prompt sources | Notes |
 |---|---|---|---|
-| Codex CLI | `toon codex -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Best-effort wrapper around the native binary. |
-| Claude CLI | `toon claude -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Structured prompt compression only; no response rewriting. |
-| Cursor CLI | `toon cursor -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Wrapper mode only; interactive TUI keystrokes are not intercepted. |
-| Gemini CLI | `toon gemini -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Same baseline behavior as other adapters. |
+| Codex CLI | `toon codex -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Best-effort wrapper around the native binary; release workflow coverage targets Python 3.9-3.12. |
+| Claude CLI | `toon claude -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Structured prompt compression only; no response rewriting; release workflow coverage targets Python 3.9-3.12. |
+| Cursor CLI | `toon cursor -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Wrapper mode only; interactive TUI keystrokes are not intercepted; release workflow coverage targets Python 3.9-3.12. |
+| Gemini CLI | `toon gemini -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Same baseline behavior as other adapters; release workflow coverage targets Python 3.9-3.12. |
+| Aider CLI | `toon aider -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Wrapper-mode integration for initial prompt compression before native execution. |
+| Continue CLI | `toon continue -- ...` | `--prompt`, `--prompt-file`, `--stdin` | Wrapper-mode integration for CLI-based Continue workflows. |
 
 ## Toon Format Versioning
 
@@ -156,6 +212,8 @@ Run the fixture benchmark script with:
 PYTHONPATH=src python3 scripts/benchmark_fixtures.py
 ```
 
+Token deltas in alpha are still **estimates** and should be interpreted as directional, not billing-accurate.
+
 ## Development
 
 Run tests:
@@ -170,3 +228,20 @@ Useful repo docs:
 - [Contributing](./CONTRIBUTING.md)
 - [Security](./SECURITY.md)
 - [Releasing](./docs/RELEASING.md)
+- [Docs site config](./mkdocs.yml)
+
+## Python SDK
+
+```python
+from toonprompt import ToonPrompt
+
+client = ToonPrompt(profile="default")
+result = client.transform('{"id":1,"name":"node"}')
+print(result.output)
+```
+
+## Distribution
+
+- PyPI package: `pip install toonprompt`
+- pipx: `pipx install toonprompt`
+- Dockerfile included for containerized CLI usage

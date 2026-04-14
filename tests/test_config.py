@@ -35,5 +35,67 @@ def test_unknown_key_raises_config_error(monkeypatch, tmp_path: Path) -> None:
     target.parent.mkdir(parents=True)
     target.write_text('mystery = "value"\n')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
-    with pytest.raises(ConfigError, match="unknown config keys"):
+    with pytest.raises(ConfigError, match="unknown config key"):
         load_config(cwd=tmp_path)
+
+
+def test_invalid_token_estimator_raises_config_error(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    target = config_dir / "toonprompt" / "config.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text('token_estimator = "bad-mode"\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+    with pytest.raises(ConfigError, match="token_estimator"):
+        load_config(cwd=tmp_path)
+
+
+def test_non_string_token_estimator_raises_config_error(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    target = config_dir / "toonprompt" / "config.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text("token_estimator = [\"auto\"]\n")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+    with pytest.raises(ConfigError, match="token_estimator must be a string"):
+        load_config(cwd=tmp_path)
+
+
+def test_env_override_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOON_MODE", "structured-only")
+    config = load_config(cwd=tmp_path)
+    assert config.mode == "structured-only"
+
+
+def test_env_override_preview_bool(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOON_PREVIEW", "yes")
+    config = load_config(cwd=tmp_path)
+    assert config.preview == "always"
+
+
+def test_env_override_invalid_preview(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOON_PREVIEW", "maybe")
+    with pytest.raises(ConfigError, match="TOON_PREVIEW"):
+        load_config(cwd=tmp_path)
+
+
+def test_env_override_max_input_bytes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TOON_MAX_INPUT_BYTES", "1024")
+    config = load_config(cwd=tmp_path)
+    assert config.limits["max_input_bytes"] == 1024
+
+
+def test_profile_section_applies_named_profile(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    target = config_dir / "toonprompt" / "config.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "\n".join(
+            [
+                "[profile.fast]",
+                'token_estimator = "heuristic"',
+            ]
+        )
+    )
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+    config = load_config(cwd=tmp_path, profile="fast")
+    assert config.profile == "fast"
+    assert config.token_estimator == "heuristic"

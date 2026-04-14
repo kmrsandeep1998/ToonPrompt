@@ -47,4 +47,5 @@ class TransformResult:
     safety: SafetyDecision
     estimated_input_tokens: int
     estimated_output_tokens: int
+    estimator_name: str = "heuristic-char4"
     explanations: list[str] = field(default_factory=list)
