@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import AsyncIterator, Iterator
 
 from .config import Config, default_config_path, load_config
 from .detector import build_document, read_prompt
@@ -58,6 +59,45 @@ class PromptProcessingService:
         document = build_document(text)
         result = await self.policy.run_async(document, config, tool=tool)
         return ProcessedPrompt(config=config, result=result)
+
+    def stream_process(
+        self,
+        prompt: str | None,
+        prompt_file: Path | None,
+        use_stdin: bool,
+        *,
+        chunk_size: int = 8192,
+        cwd: Path | None = None,
+        profile: str = "default",
+        tool: str = "",
+    ) -> Iterator[str]:
+        config = load_config(cwd=cwd, profile=profile)
+        config.active_adapter = tool
+        try:
+            text = read_prompt(prompt, prompt_file, use_stdin)
+        except (OSError, ValueError) as exc:
+            raise PromptInputError(str(exc)) from exc
+        yield from self.policy.apply_stream(text, config, tool=tool, chunk_size=chunk_size)
+
+    async def stream_process_async(
+        self,
+        prompt: str | None,
+        prompt_file: Path | None,
+        use_stdin: bool,
+        *,
+        chunk_size: int = 8192,
+        cwd: Path | None = None,
+        profile: str = "default",
+        tool: str = "",
+    ) -> AsyncIterator[str]:
+        config = load_config(cwd=cwd, profile=profile)
+        config.active_adapter = tool
+        try:
+            text = read_prompt(prompt, prompt_file, use_stdin)
+        except (OSError, ValueError) as exc:
+            raise PromptInputError(str(exc)) from exc
+        async for chunk in self.policy.apply_stream_async(text, config, tool=tool, chunk_size=chunk_size):
+            yield chunk
 
 
 def doctor_report(cwd: Path | None = None, profile: str = "default") -> tuple[Config, str]:

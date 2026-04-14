@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import AsyncIterator, Iterator
 
 from .config import Config, load_config, validate_config
 from .detector import build_document
@@ -65,6 +65,12 @@ class ToonPrompt:
         return await asyncio.to_thread(self.transform, prompt, tool=tool)
 
     def stream(self, prompt: str, *, tool: str = "", chunk_size: int = 2048) -> Iterator[str]:
-        transformed = self.transform(prompt, tool=tool).output
-        for idx in range(0, len(transformed), max(1, chunk_size)):
-            yield transformed[idx : idx + chunk_size]
+        config = Config(**self._config.__dict__)
+        config.active_adapter = tool
+        yield from self._policy.apply_stream(prompt, config, tool=tool, chunk_size=max(1, chunk_size))
+
+    async def stream_async(self, prompt: str, *, tool: str = "", chunk_size: int = 2048) -> AsyncIterator[str]:
+        config = Config(**self._config.__dict__)
+        config.active_adapter = tool
+        async for chunk in self._policy.apply_stream_async(prompt, config, tool=tool, chunk_size=max(1, chunk_size)):
+            yield chunk
