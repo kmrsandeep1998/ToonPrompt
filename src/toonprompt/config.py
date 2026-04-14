@@ -58,6 +58,8 @@ tables = true
 
 [compressors]
 enabled = []
+trusted_prefixes = ["toonprompt.plugins", "toonprompt_ext"]
+allow_untrusted = false
 """
 
 
@@ -110,6 +112,8 @@ class Config:
         }
     )
     compressor_plugins: list[str] = field(default_factory=list)
+    trusted_plugin_prefixes: list[str] = field(default_factory=lambda: ["toonprompt.plugins", "toonprompt_ext"])
+    unsafe_allow_untrusted_plugins: bool = False
     profiles: dict[str, dict] = field(default_factory=dict)
 
 
@@ -202,6 +206,7 @@ def apply_env_overrides(config: Config) -> Config:
         "TOON_OTEL_ENABLED": ("otel_enabled", _parse_bool),
         "TOON_OTEL_ENDPOINT": ("otel_endpoint", str),
         "TOON_OTEL_SERVICE_NAME": ("otel_service_name", str),
+        "TOON_ALLOW_UNTRUSTED_PLUGINS": ("unsafe_allow_untrusted_plugins", _parse_bool),
     }
     for env_key, (field_name, coerce) in mapping.items():
         raw = os.environ.get(env_key)
@@ -217,6 +222,9 @@ def apply_env_overrides(config: Config) -> Config:
             config.limits["max_input_bytes"] = int(max_input)
         except ValueError as exc:
             raise ConfigError(f"TOON_MAX_INPUT_BYTES={max_input!r}: must be an integer") from exc
+    trusted_prefixes = os.environ.get("TOON_TRUSTED_PLUGIN_PREFIXES")
+    if trusted_prefixes is not None:
+        config.trusted_plugin_prefixes = [part.strip() for part in trusted_prefixes.split(",") if part.strip()]
     return config
 
 
@@ -281,6 +289,16 @@ def _merge_config(config: Config, raw: dict) -> Config:
         if not isinstance(enabled, list) or not all(isinstance(item, str) for item in enabled):
             raise ConfigError("compressors.enabled must be a list of 'module:ClassName' strings")
         config.compressor_plugins = enabled
+        trusted_prefixes = compressors.get("trusted_prefixes")
+        if trusted_prefixes is not None:
+            if not isinstance(trusted_prefixes, list) or not all(isinstance(item, str) for item in trusted_prefixes):
+                raise ConfigError("compressors.trusted_prefixes must be a list of module prefixes")
+            config.trusted_plugin_prefixes = trusted_prefixes
+        allow_untrusted = compressors.get("allow_untrusted")
+        if allow_untrusted is not None:
+            if not isinstance(allow_untrusted, bool):
+                raise ConfigError("compressors.allow_untrusted must be a boolean")
+            config.unsafe_allow_untrusted_plugins = allow_untrusted
 
     return config
 
@@ -331,6 +349,14 @@ def validate_config(config: Config) -> Config:
     for key, value in config.limits.items():
         if not isinstance(value, int) or value <= 0:
             raise ConfigError(f"limits.{key} must be a positive integer")
+    if not isinstance(config.unsafe_allow_untrusted_plugins, bool):
+        raise ConfigError("unsafe_allow_untrusted_plugins must be a boolean")
+    if (
+        not isinstance(config.trusted_plugin_prefixes, list)
+        or not config.trusted_plugin_prefixes
+        or not all(isinstance(item, str) and item.strip() for item in config.trusted_plugin_prefixes)
+    ):
+        raise ConfigError("trusted_plugin_prefixes must be a non-empty list of strings")
     return config
 
 

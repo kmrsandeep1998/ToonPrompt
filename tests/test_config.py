@@ -99,3 +99,31 @@ def test_profile_section_applies_named_profile(monkeypatch: pytest.MonkeyPatch, 
     config = load_config(cwd=tmp_path, profile="fast")
     assert config.profile == "fast"
     assert config.token_estimator == "heuristic"
+
+
+def test_compressor_trust_config_is_loaded(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    target = config_dir / "toonprompt" / "config.toml"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "\n".join(
+            [
+                "[compressors]",
+                'enabled = ["example.plugins:Compressor"]',
+                'trusted_prefixes = ["example.plugins"]',
+                "allow_untrusted = true",
+            ]
+        )
+    )
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+    config = load_config(cwd=tmp_path)
+    assert config.compressor_plugins == ["example.plugins:Compressor"]
+    assert config.trusted_plugin_prefixes == ["example.plugins"]
+    assert config.unsafe_allow_untrusted_plugins is True
+
+
+def test_validate_config_rejects_empty_trusted_plugin_prefixes() -> None:
+    config = Config()
+    config.trusted_plugin_prefixes = []
+    with pytest.raises(ConfigError, match="trusted_plugin_prefixes"):
+        validate_config(config)

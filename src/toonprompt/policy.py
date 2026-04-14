@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 import time
+from typing import AsyncIterator, Iterator
 
 from .audit import write_audit_record
 from .config import Config
 from .compressors import compress_logs, compress_stacktrace, compress_yaml
 from .estimators import TokenEstimator, build_estimator
 from .format import supported_format
-from .logging_utils import log_event, sha256_text
+from .logging_utils import log_event, sanitize_prompt_for_hash, sha256_text
 from .metrics import LocalMetricsStore
 from .plugins import Compressor, load_config_compressors, load_entry_point_compressors
 from .models import PromptDocument, PromptSegment, SafetyDecision, SegmentType, TransformResult
@@ -128,6 +129,37 @@ class TransformationPolicy:
 
         return await asyncio.to_thread(self.apply, document, config, tool)
 
+    def apply_stream(
+        self,
+        text: str,
+        config: Config,
+        tool: str = "",
+        *,
+        chunk_size: int = 8192,
+    ) -> Iterator[str]:
+        from .detector import build_document
+
+        size = max(1, chunk_size)
+        for chunk in _chunk_text(text, size):
+            chunk_document = build_document(chunk)
+            chunk_result = self.apply(chunk_document, config, tool=tool)
+            yield chunk_result.final_text
+
+    async def apply_stream_async(
+        self,
+        text: str,
+        config: Config,
+        tool: str = "",
+        *,
+        chunk_size: int = 8192,
+    ) -> AsyncIterator[str]:
+        import asyncio
+        from .detector import build_document
+
+        for chunk in _chunk_text(text, max(1, chunk_size)):
+            result = await asyncio.to_thread(self.apply, build_document(chunk), config, tool)
+            yield result.final_text
+
     def _transform_segment(
         self,
         segment: PromptSegment,
@@ -172,6 +204,7 @@ class TransformationPolicy:
             estimator_name=estimator.name,
             explanations=explanations,
         )
+        self._log_result(result, config)
         self._record_metrics(result, config=config, tool=tool)
         self._emit_telemetry(result, config, tool=tool)
         self._write_audit(result, config, tool=tool, duration_ms=0)
@@ -180,6 +213,7 @@ class TransformationPolicy:
     def _log_result(self, result: TransformResult, config: Config) -> None:
         if config.logging != "local-minimal":
             return
+        safe_for_hash = sanitize_prompt_for_hash(result.original_text)
         try:
             log_event(
                 "transform",
@@ -188,7 +222,7 @@ class TransformationPolicy:
                     "reason": result.safety.reason,
                     "input_tokens": result.estimated_input_tokens,
                     "output_tokens": result.estimated_output_tokens,
-                    "prompt_hash": sha256_text(result.original_text) if config.redaction else None,
+                    "prompt_hash": sha256_text(safe_for_hash) if config.redaction else None,
                     "segment_types": [segment.segment_type.value for segment in result.segments],
                     "transformed": result.transformed,
                 },
@@ -213,8 +247,19 @@ class TransformationPolicy:
     def _load_compressors(self, config: Config) -> list[Compressor]:
         compressors: list[Compressor] = []
         compressors.extend(_builtin_compressors())
-        compressors.extend(load_entry_point_compressors())
-        compressors.extend(load_config_compressors(config.compressor_plugins))
+        compressors.extend(
+            load_entry_point_compressors(
+                trusted_prefixes=config.trusted_plugin_prefixes,
+                allow_untrusted=config.unsafe_allow_untrusted_plugins,
+            )
+        )
+        compressors.extend(
+            load_config_compressors(
+                config.compressor_plugins,
+                trusted_prefixes=config.trusted_plugin_prefixes,
+                allow_untrusted=config.unsafe_allow_untrusted_plugins,
+            )
+        )
         return compressors
 
     def _apply_custom_compressors(
@@ -312,3 +357,20 @@ class _StacktraceCompressor:
 
 def _builtin_compressors() -> list[Compressor]:
     return [_YamlCompressor(), _LogCompressor(), _StacktraceCompressor()]
+
+
+def _chunk_text(text: str, chunk_size: int) -> Iterator[str]:
+    if not text:
+        yield ""
+        return
+    idx = 0
+    while idx < len(text):
+        end = min(len(text), idx + chunk_size)
+        if end < len(text):
+            split = text.rfind("\n", idx, end)
+            if split > idx:
+                end = split + 1
+        if end <= idx:
+            end = min(len(text), idx + chunk_size)
+        yield text[idx:end]
+        idx = end
