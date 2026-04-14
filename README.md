@@ -4,6 +4,14 @@ ToonPrompt is a pip-installable wrapper for coding CLIs such as Codex, Claude, C
 
 This repository is currently in public alpha. The packaging metadata, contribution docs, and release scaffolding are intentionally lightweight so the project can ship early without hiding the rough edges.
 
+## At a glance
+
+- **What it is:** a CLI + Python SDK for prompt optimization.
+- **Why it exists:** to reduce structured-context token overhead without rewriting user intent.
+- **How it works:** detect segment types, compress high-confidence structured parts, pass through everything else.
+- **When to use it:** before sending large coding prompts containing JSON/YAML/logs/stacktraces to AI coding tools.
+- **When not to use it:** if your workflow depends on full interactive terminal capture or strict byte-for-byte prompt preservation.
+
 ## Why this exists
 
 Large coding prompts often waste context on repeated keys, punctuation, and machine-shaped payloads. ToonPrompt reduces that overhead while keeping human intent readable and leaving uncertain content unchanged.
@@ -15,6 +23,15 @@ Default behavior:
 - local minimal logs with redacted prompt hashes
 - preview on demand
 - prompt-only transformation
+
+## What ToonPrompt can do
+
+- Run as a direct wrapper (`toon codex ...`, `toon claude ...`, etc.).
+- Inspect transformations without invoking native tools (`toon inspect`).
+- Enforce token budgets in CI (`toon check --max-tokens ...`).
+- Track local metrics and audit records (opt-in).
+- Expose a Python SDK (`ToonPrompt`) for app integration.
+- Provide monorepo integration assets for Homebrew, VS Code, and GitHub Actions.
 
 ## Installation
 
@@ -80,6 +97,14 @@ Validate prompt files against a token budget:
 ```bash
 toon check --max-tokens 12000 prompts/*.txt
 ```
+
+## When to use each command
+
+- `toon inspect`: understand exactly what will change and why.
+- `toon <tool>`: run transformed prompt through a supported CLI.
+- `toon metrics` / `toon audit`: observe compression behavior over time.
+- `toon check`: block oversized prompt files in pre-commit/CI pipelines.
+- `toon doctor`: validate local setup and adapter availability.
 
 ## Supported prompt sources
 
