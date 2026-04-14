@@ -9,6 +9,7 @@ nav:
   - Configuration: configuration.md
   - SDK: sdk.md
   - CLI Reference: cli-reference.md
+  - Ecosystem: ecosystem.md
   - Enterprise:
       - Audit logging: enterprise/audit.md
       - Profiles: enterprise/profiles.md

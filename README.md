@@ -245,3 +245,10 @@ print(result.output)
 - PyPI package: `pip install toonprompt`
 - pipx: `pipx install toonprompt`
 - Dockerfile included for containerized CLI usage
+
+## Ecosystem Starters
+
+- Homebrew formula template: [`packaging/homebrew/Formula/toonprompt.rb`](./packaging/homebrew/Formula/toonprompt.rb)
+- Homebrew tap auto-bump workflow: [`.github/workflows/homebrew-tap.yml`](./.github/workflows/homebrew-tap.yml)
+- VS Code extension starter: [`integrations/vscode/toonprompt-vscode`](./integrations/vscode/toonprompt-vscode)
+- GitHub Action composite check: [`.github/actions/toonprompt-check/action.yml`](./.github/actions/toonprompt-check/action.yml)

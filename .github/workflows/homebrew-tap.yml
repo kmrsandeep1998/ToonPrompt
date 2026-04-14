@@ -1,0 +1,46 @@
+name: Homebrew Tap PR
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  bump-formula:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          URL="https://github.com/kmrsandeep1998/ToonPrompt/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          SHA="$(curl -L -sS "$URL" | sha256sum | awk '{print $1}')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: kmrsandeep1998/homebrew-toonprompt
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: Update formula
+        run: |
+          python scripts/update_homebrew_formula.py \
+            --formula tap/Formula/toonprompt.rb \
+            --version "${{ steps.meta.outputs.version }}" \
+            --sha256 "${{ steps.meta.outputs.sha }}"
+      - name: Create PR in tap repo
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+          commit-message: "Bump toonprompt to v${{ github.ref_name }}"
+          branch: "bump-toonprompt-${{ github.ref_name }}"
+          title: "Bump ToonPrompt to ${{ github.ref_name }}"
+          body: |
+            Automated formula bump from ToonPrompt release `${{ github.ref_name }}`.
