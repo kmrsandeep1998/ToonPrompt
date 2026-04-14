@@ -29,7 +29,7 @@ jobs:
             --version "${{ steps.meta.outputs.version }}" \
             --sha256 "${{ steps.meta.outputs.sha }}"
       - name: Upload formula artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: toonprompt-homebrew-formula-${{ github.ref_name }}
           path: packaging/homebrew/Formula/toonprompt.rb
