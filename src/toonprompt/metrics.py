@@ -132,7 +132,7 @@ def _normalize_counter_map(raw: dict[object, object]) -> dict[str, dict[str, int
         applied = value.get("applied")
         pass_through = value.get("pass_through")
         delta = value.get("delta")
-        if not all(isinstance(item, int) for item in (attempted, applied, pass_through, delta)):
+        if not isinstance(attempted, int) or not isinstance(applied, int) or not isinstance(pass_through, int) or not isinstance(delta, int):
             continue
         if attempted < 0 or applied < 0 or pass_through < 0:
             continue

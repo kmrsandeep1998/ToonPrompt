@@ -29,25 +29,28 @@ class SerializerTransformer:
 
 
 class StackTraceTransformer:
-    segment_types = (SegmentType.STACKTRACE,)
+    segment_types: tuple[SegmentType, ...] = (SegmentType.STACKTRACE,)
 
     def transform(self, segment: PromptSegment, config: Config) -> PromptSegment:
+        lines: object = None
+        if isinstance(segment.parsed, dict):
+            lines = segment.parsed.get("lines")
         return replace(
             segment,
-            transformed_text=to_toon({"stack": segment.parsed["lines"]}, name="trace", max_depth=config.limits["max_depth"]) + "\n",
+            transformed_text=to_toon({"stack": lines if isinstance(lines, list) else []}, name="trace", max_depth=config.limits["max_depth"]) + "\n",
             reason="compressed stack trace into Toon format",
         )
 
 
 class TreePassthroughTransformer:
-    segment_types = (SegmentType.TREE,)
+    segment_types: tuple[SegmentType, ...] = (SegmentType.TREE,)
 
     def transform(self, segment: PromptSegment, config: Config) -> PromptSegment:
         return replace(segment, reason="tree-like input already compact; kept original")
 
 
 class UnsupportedPassthroughTransformer:
-    segment_types = (SegmentType.UNKNOWN,)
+    segment_types: tuple[SegmentType, ...] = (SegmentType.UNKNOWN,)
 
     def transform(self, segment: PromptSegment, config: Config) -> PromptSegment:
         return replace(segment, reason="unsupported segment type; kept original")

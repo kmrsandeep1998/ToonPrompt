@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, Sequence
 
 from .config import Config
 
@@ -24,10 +24,15 @@ class HeuristicTokenEstimator:
         return max(1, (len(text) + 3) // 4)
 
 
+class _Encoder(Protocol):
+    def encode(self, text: str) -> Sequence[int]:
+        ...
+
+
 @dataclass
 class TikTokenEstimator:
     model: str
-    _encoder: object
+    _encoder: _Encoder
     name: str = ""
 
     def __post_init__(self) -> None:

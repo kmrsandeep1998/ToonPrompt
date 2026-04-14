@@ -22,7 +22,9 @@ jobs:
       - run: python -m pip install -e .[dev]
       - run: python -m pytest --tb=short -q
       - name: Benchmark regression check
-        run: PYTHONPATH=src python scripts/benchmark_ci.py
+        env:
+          PYTHONPATH: src
+        run: python scripts/benchmark_ci.py
       - run: python -m build
 
   lint:
