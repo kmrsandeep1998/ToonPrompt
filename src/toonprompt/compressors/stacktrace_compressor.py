@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Iterable
-
 
 def _looks_like_frame(line: str) -> bool:
     stripped = line.strip()

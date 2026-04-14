@@ -259,7 +259,7 @@ def _run_tool(tool: str, args: argparse.Namespace, profile: str) -> int:
 def _run_doctor(profile: str) -> int:
     config, config_line = doctor_report(profile=profile)
     print(config_line)
-    print(f"Config valid: yes")
+    print("Config valid: yes")
     print("Tools:")
     missing = False
     for tool in TOOLS:

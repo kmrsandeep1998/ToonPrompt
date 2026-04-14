@@ -7,6 +7,14 @@ from unittest.mock import patch
 from toonprompt.cli import main
 
 
+def _set_config_env(monkeypatch, config_home: Path, state_home: Path | None = None) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("APPDATA", str(config_home))
+    if state_home is not None:
+        monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+        monkeypatch.setenv("LOCALAPPDATA", str(state_home))
+
+
 def test_inspect_preview(capsys) -> None:
     prompt = '{"nodes":[{"id":1,"name":"Node 1"},{"id":2,"name":"Node 2"}]}'
     code = main(["inspect", "--prompt", prompt, "--preview"])
@@ -49,7 +57,7 @@ def test_invalid_config_returns_clean_error(capsys, monkeypatch, tmp_path: Path)
     target = config_dir / "toonprompt" / "config.toml"
     target.parent.mkdir(parents=True)
     target.write_text('toon_format = "999"\n')
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir))
+    _set_config_env(monkeypatch, config_dir)
     code = main(["inspect", "--prompt", '{"id":1}'])
     captured = capsys.readouterr()
     assert code == 2
@@ -69,8 +77,7 @@ def test_metrics_command_reports_values_when_enabled(capsys, monkeypatch, tmp_pa
     cfg = config_home / "toonprompt" / "config.toml"
     cfg.parent.mkdir(parents=True)
     cfg.write_text("local_metrics_enabled = true\n")
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
-    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    _set_config_env(monkeypatch, config_home, state_home)
     prompt = '{"nodes":[{"id":1,"name":"Node 1"},{"id":2,"name":"Node 2"}]}'
     inspect_code = main(["inspect", "--prompt", prompt])
     metrics_code = main(["metrics"])
@@ -96,8 +103,7 @@ def test_metrics_json_output(capsys, monkeypatch, tmp_path: Path) -> None:
     cfg = config_home / "toonprompt" / "config.toml"
     cfg.parent.mkdir(parents=True)
     cfg.write_text("local_metrics_enabled = true\n")
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
-    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    _set_config_env(monkeypatch, config_home, state_home)
     main(["inspect", "--prompt", '{"id":1}'])
     code = main(["metrics", "--json"])
     captured = capsys.readouterr()
@@ -144,8 +150,7 @@ def test_metrics_text_includes_daily_trend_bar(capsys, monkeypatch, tmp_path: Pa
     cfg = config_home / "toonprompt" / "config.toml"
     cfg.parent.mkdir(parents=True)
     cfg.write_text("local_metrics_enabled = true\n")
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
-    monkeypatch.setenv("XDG_STATE_HOME", str(state_home))
+    _set_config_env(monkeypatch, config_home, state_home)
     main(["inspect", "--prompt", '{"id":1,"name":"Alpha"}'])
     code = main(["metrics"])
     captured = capsys.readouterr()
