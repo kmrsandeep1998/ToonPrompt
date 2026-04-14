@@ -35,6 +35,12 @@ jobs:
         with:
           name: toonprompt-dist
           path: dist/*
-      - name: Publish to PyPI
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      - name: Publish to PyPI (trusted publisher)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.PYPI_API_TOKEN == ''
         uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to PyPI (token fallback)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && secrets.PYPI_API_TOKEN != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
