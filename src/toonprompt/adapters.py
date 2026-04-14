@@ -13,7 +13,7 @@ class ToolAdapter(Protocol):
     tool: str
     binary: str
 
-    def build_command(self, native_args: list[str]) -> list[str]:
+    def build_command(self, native_args: list[str], prompt_text: str | None = None) -> list[str]:
         ...
 
     def supports_stdin(self) -> bool:
@@ -28,7 +28,7 @@ class BinaryToolAdapter:
     tool: str
     binary: str
 
-    def build_command(self, native_args: list[str]) -> list[str]:
+    def build_command(self, native_args: list[str], prompt_text: str | None = None) -> list[str]:
         return [self.binary, *native_args]
 
     def supports_stdin(self) -> bool:
@@ -41,8 +41,38 @@ class BinaryToolAdapter:
         return False, self.binary
 
 
+@dataclass
+class AiderToolAdapter(BinaryToolAdapter):
+    def build_command(self, native_args: list[str], prompt_text: str | None = None) -> list[str]:
+        args = list(native_args)
+        if prompt_text and not _has_prompt_flag(args, ("--message", "-m")):
+            args = ["--message", prompt_text, *args]
+        return [self.binary, *args]
+
+    def supports_stdin(self) -> bool:
+        # Aider works more reliably when prompts are passed via --message.
+        return False
+
+
+@dataclass
+class ContinueToolAdapter(BinaryToolAdapter):
+    def build_command(self, native_args: list[str], prompt_text: str | None = None) -> list[str]:
+        args = list(native_args)
+        if prompt_text and not _has_prompt_flag(args, ("--prompt", "-p")):
+            args = ["--prompt", prompt_text, *args]
+        return [self.binary, *args]
+
+    def supports_stdin(self) -> bool:
+        # Continue wrapper uses explicit prompt flag for deterministic invocation.
+        return False
+
+
 def resolve_adapter(tool: str, config: Config) -> ToolAdapter:
     binary = config.tool_paths.get(tool, tool)
+    if tool == "aider":
+        return AiderToolAdapter(tool=tool, binary=binary)
+    if tool == "continue":
+        return ContinueToolAdapter(tool=tool, binary=binary)
     return BinaryToolAdapter(tool=tool, binary=binary)
 
 
@@ -56,7 +86,7 @@ def run_adapter(adapter: ToolAdapter, native_args: list[str], prompt_text: str |
         raise AdapterExecutionError(f"{adapter.tool} CLI not found: {detail}")
     try:
         process = subprocess.run(
-            adapter.build_command(native_args),
+            adapter.build_command(native_args, prompt_text),
             input=prompt_text if adapter.supports_stdin() else None,
             text=True,
             check=False,
@@ -64,3 +94,12 @@ def run_adapter(adapter: ToolAdapter, native_args: list[str], prompt_text: str |
     except OSError as exc:
         raise AdapterExecutionError(f"failed to launch {adapter.tool}: {exc}") from exc
     return process.returncode
+
+
+def _has_prompt_flag(native_args: list[str], flags: tuple[str, ...]) -> bool:
+    for arg in native_args:
+        if arg in flags:
+            return True
+        if any(arg.startswith(f"{flag}=") for flag in flags if flag.startswith("--")):
+            return True
+    return False

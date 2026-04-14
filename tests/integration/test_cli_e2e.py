@@ -52,7 +52,12 @@ def test_metrics_json_output(tmp_path) -> None:
     cfg = config_home / "toonprompt" / "config.toml"
     cfg.parent.mkdir(parents=True)
     cfg.write_text("local_metrics_enabled = true\n")
-    env = {"XDG_CONFIG_HOME": str(config_home), "XDG_STATE_HOME": str(state_home)}
+    env = {
+        "XDG_CONFIG_HOME": str(config_home),
+        "XDG_STATE_HOME": str(state_home),
+        "APPDATA": str(config_home),
+        "LOCALAPPDATA": str(state_home),
+    }
     toon("inspect", "--prompt", '{"id":1}', env=env)
     r = toon("metrics", "--json", env=env)
     assert r.returncode == 0

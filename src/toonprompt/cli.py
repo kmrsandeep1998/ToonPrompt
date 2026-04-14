@@ -10,9 +10,16 @@ import difflib
 from . import __version__
 from .adapters import resolve_adapter, run_adapter, tool_status
 from .audit import read_audit
-from .config import write_default_config
+from .config import load_config, write_default_config
+from .estimators import build_estimator
 from .errors import AdapterExecutionError, ConfigError, PromptInputError, ToonPromptError
-from .output import print_summary
+from .output import (
+    build_segment_breakdowns,
+    format_inspect_text,
+    format_metrics_text,
+    inspect_json_dump,
+    print_summary,
+)
 from .services import PromptProcessingService, doctor_report, metrics_report
 
 
@@ -32,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
         _add_prompt_args(tool_parser)
         tool_parser.add_argument("--dry-run", action="store_true", help="Print transformed prompt and exit.")
         tool_parser.add_argument("--async", action="store_true", dest="async_mode", help=argparse.SUPPRESS)
+        tool_parser.add_argument("--stream-chunk-size", type=int, help=argparse.SUPPRESS)
         tool_parser.add_argument("--preview", action="store_true", help="show original and transformed prompt")
         tool_parser.add_argument("--explain", action="store_true", help="show transform explanations")
         tool_parser.add_argument("--print-final-prompt", action="store_true", help="print final prompt and exit")
@@ -41,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_prompt_args(inspect_parser)
     inspect_parser.add_argument("--dry-run", action="store_true", help="Print transformed prompt and exit.")
     inspect_parser.add_argument("--async", action="store_true", dest="async_mode", help=argparse.SUPPRESS)
+    inspect_parser.add_argument("--stream-chunk-size", type=int, help=argparse.SUPPRESS)
     inspect_parser.add_argument("--preview", action="store_true", help="show original and transformed prompt")
     inspect_parser.add_argument("--explain", action="store_true", help="show transform explanations")
     inspect_parser.add_argument("--diff", action="store_true", help="Show line-by-line diff.")
@@ -122,6 +131,9 @@ def _add_prompt_args(parser: argparse.ArgumentParser) -> None:
 
 def _run_inspect(args: argparse.Namespace, profile: str) -> int:
     service = PromptProcessingService()
+    if args.stream_chunk_size:
+        print("".join(service.stream_process(args.prompt, args.prompt_file, args.stdin, profile=profile, chunk_size=args.stream_chunk_size)))
+        return 0
     if args.async_mode:
         import asyncio
 
@@ -131,27 +143,15 @@ def _run_inspect(args: argparse.Namespace, profile: str) -> int:
     config = processed.config
     result = processed.result
     input_size = len(result.original_text.encode("utf-8"))
-    segment_stats = _segment_stats(result)
+    estimator = build_estimator(config)
+    breakdown = build_segment_breakdowns(result, estimator)
+    explanation_requested = args.explain or config.learning_explanations
     if args.format == "json":
-        print(
-            json.dumps(
-                {
-                    "action": result.safety.action,
-                    "reason": result.safety.reason,
-                    "estimator": result.estimator_name,
-                    "estimated_input_tokens": result.estimated_input_tokens,
-                    "estimated_output_tokens": result.estimated_output_tokens,
-                    "delta": result.estimated_input_tokens - result.estimated_output_tokens,
-                    "input_bytes": input_size,
-                    "segments": segment_stats,
-                    "transformed": result.final_text,
-                },
-                indent=2,
-            )
-        )
+        json_explanations = result.explanations if explanation_requested else None
+        print(inspect_json_dump(result, input_size, breakdown, explanations=json_explanations))
     else:
-        print(_format_inspect_summary(result, segment_stats, input_size, markdown=(args.format == "markdown")))
-    if args.explain or config.learning_explanations:
+        print(format_inspect_text(result, input_size, breakdown, markdown=(args.format == "markdown")))
+    if explanation_requested and args.format != "json":
         print("\nExplanations:")
         for line in result.explanations:
             print(f"- {line}")
@@ -159,7 +159,11 @@ def _run_inspect(args: argparse.Namespace, profile: str) -> int:
         idx = args.segment - 1
         if 0 <= idx < len(result.segments):
             seg = result.segments[idx]
-            print(f"\nSegment {args.segment}: {seg.segment_type.value} ({seg.source})")
+            row = breakdown[idx]
+            print(
+                f"\nSegment {args.segment}: {seg.segment_type.value} ({seg.source}) "
+                f"lines {row.line_start}-{row.line_end}, tokens {row.input_tokens}->{row.output_tokens} (delta {row.delta})"
+            )
             print(seg.text)
         else:
             print(f"\nSegment {args.segment}: not found")
@@ -189,6 +193,26 @@ def _run_inspect(args: argparse.Namespace, profile: str) -> int:
 
 def _run_tool(tool: str, args: argparse.Namespace, profile: str) -> int:
     service = PromptProcessingService()
+    if args.stream_chunk_size:
+        final_prompt = "".join(
+            service.stream_process(
+                args.prompt,
+                args.prompt_file,
+                args.stdin,
+                profile=profile,
+                tool=tool,
+                chunk_size=args.stream_chunk_size,
+            )
+        )
+        if args.print_final_prompt or args.dry_run:
+            print(final_prompt)
+            return 0
+        native_args = list(args.native_args)
+        if native_args and native_args[0] == "--":
+            native_args = native_args[1:]
+        config = load_config(profile=profile)
+        adapter = resolve_adapter(tool, config)
+        return run_adapter(adapter, native_args, final_prompt or None)
     if args.async_mode:
         import asyncio
 
@@ -235,7 +259,7 @@ def _run_tool(tool: str, args: argparse.Namespace, profile: str) -> int:
 def _run_doctor(profile: str) -> int:
     config, config_line = doctor_report(profile=profile)
     print(config_line)
-    print(f"Config valid: yes")
+    print("Config valid: yes")
     print("Tools:")
     missing = False
     for tool in TOOLS:
@@ -245,64 +269,6 @@ def _run_doctor(profile: str) -> int:
         if not present:
             missing = True
     return 1 if missing else 0
-
-
-def _format_summary(result, markdown: bool = False) -> str:
-    delta = result.estimated_input_tokens - result.estimated_output_tokens
-    if markdown:
-        return (
-            f"### ToonPrompt Inspection\n"
-            f"- Action: `{result.safety.action}`\n"
-            f"- Reason: `{result.safety.reason}`\n"
-            f"- Estimator: `{result.estimator_name}`\n"
-            f"- Estimated input tokens: `{result.estimated_input_tokens}`\n"
-            f"- Estimated output tokens: `{result.estimated_output_tokens}`\n"
-            f"- Delta: `{delta}`\n"
-        )
-    return (
-        f"Action: {result.safety.action}\n"
-        f"Reason: {result.safety.reason}\n"
-        f"Estimator: {result.estimator_name}\n"
-        f"Estimated tokens: {result.estimated_input_tokens} -> {result.estimated_output_tokens} "
-        f"(delta {delta})"
-    )
-
-
-def _format_inspect_summary(result, segment_stats: dict[str, int], input_bytes: int, markdown: bool = False) -> str:
-    delta = result.estimated_input_tokens - result.estimated_output_tokens
-    seg_count = len(result.segments)
-    seg_parts = ", ".join(f"{count} {name}" for name, count in sorted(segment_stats.items())) or "0"
-    if markdown:
-        return (
-            "### ToonPrompt Inspection\n"
-            f"- Size: `{input_bytes}` bytes\n"
-            f"- Segments: `{seg_count}` ({seg_parts})\n"
-            f"- Action: `{result.safety.action}`\n"
-            f"- Reason: `{result.safety.reason}`\n"
-            f"- Estimator: `{result.estimator_name}`\n"
-            f"- Estimated input tokens: `{result.estimated_input_tokens}`\n"
-            f"- Estimated output tokens: `{result.estimated_output_tokens}`\n"
-            f"- Delta: `{delta}`\n"
-        )
-    return (
-        "=== ToonPrompt Inspection ===\n"
-        f"Size            : {input_bytes} bytes\n"
-        f"Segments        : {seg_count} ({seg_parts})\n"
-        f"Estimator       : {result.estimator_name}\n"
-        f"Est. input      : {result.estimated_input_tokens}\n"
-        f"Est. output     : {result.estimated_output_tokens}\n"
-        f"Delta           : {delta}\n"
-        f"Action          : {result.safety.action}\n"
-        f"Reason          : {result.safety.reason}"
-    )
-
-
-def _segment_stats(result) -> dict[str, int]:
-    stats: dict[str, int] = {}
-    for segment in result.segments:
-        key = segment.segment_type.value.upper()
-        stats[key] = stats.get(key, 0) + 1
-    return stats
 
 
 def _run_metrics(args: argparse.Namespace, profile: str) -> int:
@@ -326,23 +292,7 @@ def _run_metrics(args: argparse.Namespace, profile: str) -> int:
             )
         )
         return 0
-    print("Local transformation metrics:")
-    print(f"- Transforms attempted: {summary.transforms_attempted}")
-    print(f"- Transforms applied: {summary.transforms_applied}")
-    print(f"- Pass-through count: {summary.pass_through}")
-    print(f"- Estimated token delta total: {summary.estimated_token_delta_total}")
-    if summary.pass_through_reasons:
-        print("- Pass-through reasons:")
-        for reason, count in sorted(summary.pass_through_reasons.items()):
-            print(f"  - {reason}: {count}")
-    if summary.by_tool:
-        print("- By tool:")
-        for tool, data in sorted(summary.by_tool.items()):
-            print(f"  - {tool}: {data['applied']} applied / {data['attempted']} attempted (delta {data['delta']})")
-    if summary.daily:
-        print("- Daily:")
-        for day, data in sorted(summary.daily.items()):
-            print(f"  - {day}: {data['applied']} applied / {data['attempted']} attempted (delta {data['delta']})")
+    print(format_metrics_text(summary))
     return 0
 
 

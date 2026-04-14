@@ -1,0 +1,35 @@
+name: Homebrew Formula Artifact
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-formula:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          URL="https://github.com/kmrsandeep1998/ToonPrompt/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          SHA="$(curl -fL -sS "$URL" | sha256sum | awk '{print $1}')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Generate formula for this release
+        run: |
+          python scripts/update_homebrew_formula.py \
+            --formula packaging/homebrew/Formula/toonprompt.rb \
+            --version "${{ steps.meta.outputs.version }}" \
+            --sha256 "${{ steps.meta.outputs.sha }}"
+      - name: Upload formula artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: toonprompt-homebrew-formula-${{ github.ref_name }}
+          path: packaging/homebrew/Formula/toonprompt.rb

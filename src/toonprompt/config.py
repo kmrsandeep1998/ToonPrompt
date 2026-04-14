@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import importlib
 from pathlib import Path
 import os
 import sys
+from typing import Callable, cast
 
 from .errors import ConfigError
 from .format import supported_format
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
+_toml_lib: object | None = None
+for _module in ("tomllib", "tomli"):  # pragma: no cover
     try:
-        import tomli as tomllib
-    except ModuleNotFoundError:  # pragma: no cover
-        tomllib = None
+        _toml_lib = importlib.import_module(_module)
+        break
+    except ModuleNotFoundError:
+        continue
 
 
 DEFAULT_CONFIG = """mode = "structured-only"
@@ -58,6 +60,8 @@ tables = true
 
 [compressors]
 enabled = []
+trusted_prefixes = ["toonprompt.plugins", "toonprompt_ext"]
+allow_untrusted = false
 """
 
 
@@ -110,6 +114,8 @@ class Config:
         }
     )
     compressor_plugins: list[str] = field(default_factory=list)
+    trusted_plugin_prefixes: list[str] = field(default_factory=lambda: ["toonprompt.plugins", "toonprompt_ext"])
+    unsafe_allow_untrusted_plugins: bool = False
     profiles: dict[str, dict] = field(default_factory=dict)
 
 
@@ -189,7 +195,7 @@ def write_default_config(target: Path | None = None) -> Path:
 
 
 def apply_env_overrides(config: Config) -> Config:
-    mapping = {
+    mapping: dict[str, tuple[str, Callable[[str], object]]] = {
         "TOON_MODE": ("mode", str),
         "TOON_FAIL_STRATEGY": ("fail_strategy", str),
         "TOON_PREVIEW": ("preview", _parse_preview),
@@ -202,6 +208,7 @@ def apply_env_overrides(config: Config) -> Config:
         "TOON_OTEL_ENABLED": ("otel_enabled", _parse_bool),
         "TOON_OTEL_ENDPOINT": ("otel_endpoint", str),
         "TOON_OTEL_SERVICE_NAME": ("otel_service_name", str),
+        "TOON_ALLOW_UNTRUSTED_PLUGINS": ("unsafe_allow_untrusted_plugins", _parse_bool),
     }
     for env_key, (field_name, coerce) in mapping.items():
         raw = os.environ.get(env_key)
@@ -217,6 +224,9 @@ def apply_env_overrides(config: Config) -> Config:
             config.limits["max_input_bytes"] = int(max_input)
         except ValueError as exc:
             raise ConfigError(f"TOON_MAX_INPUT_BYTES={max_input!r}: must be an integer") from exc
+    trusted_prefixes = os.environ.get("TOON_TRUSTED_PLUGIN_PREFIXES")
+    if trusted_prefixes is not None:
+        config.trusted_plugin_prefixes = [part.strip() for part in trusted_prefixes.split(",") if part.strip()]
     return config
 
 
@@ -281,6 +291,16 @@ def _merge_config(config: Config, raw: dict) -> Config:
         if not isinstance(enabled, list) or not all(isinstance(item, str) for item in enabled):
             raise ConfigError("compressors.enabled must be a list of 'module:ClassName' strings")
         config.compressor_plugins = enabled
+        trusted_prefixes = compressors.get("trusted_prefixes")
+        if trusted_prefixes is not None:
+            if not isinstance(trusted_prefixes, list) or not all(isinstance(item, str) for item in trusted_prefixes):
+                raise ConfigError("compressors.trusted_prefixes must be a list of module prefixes")
+            config.trusted_plugin_prefixes = trusted_prefixes
+        allow_untrusted = compressors.get("allow_untrusted")
+        if allow_untrusted is not None:
+            if not isinstance(allow_untrusted, bool):
+                raise ConfigError("compressors.allow_untrusted must be a boolean")
+            config.unsafe_allow_untrusted_plugins = allow_untrusted
 
     return config
 
@@ -322,26 +342,35 @@ def validate_config(config: Config) -> Config:
         raise ConfigError("tokenizer_model must be a non-empty string")
     if not isinstance(config.compression_threshold, (int, float)) or not (0 <= float(config.compression_threshold) <= 1):
         raise ConfigError("compression_threshold must be between 0 and 1")
-    for key, value in config.tool_paths.items():
-        if not isinstance(value, str) or not value.strip():
+    for key, path_value in config.tool_paths.items():
+        if not isinstance(path_value, str) or not path_value.strip():
             raise ConfigError(f"tool_paths.{key} must be a non-empty string")
-    for key, value in config.compression_rules.items():
-        if not isinstance(value, bool):
+    for key, rule_enabled in config.compression_rules.items():
+        if not isinstance(rule_enabled, bool):
             raise ConfigError(f"compression_rules.{key} must be a boolean")
-    for key, value in config.limits.items():
-        if not isinstance(value, int) or value <= 0:
+    for key, limit_value in config.limits.items():
+        if not isinstance(limit_value, int) or limit_value <= 0:
             raise ConfigError(f"limits.{key} must be a positive integer")
+    if not isinstance(config.unsafe_allow_untrusted_plugins, bool):
+        raise ConfigError("unsafe_allow_untrusted_plugins must be a boolean")
+    if (
+        not isinstance(config.trusted_plugin_prefixes, list)
+        or not config.trusted_plugin_prefixes
+        or not all(isinstance(item, str) and item.strip() for item in config.trusted_plugin_prefixes)
+    ):
+        raise ConfigError("trusted_plugin_prefixes must be a non-empty list of strings")
     return config
 
 
 def _loads_toml(text: str, source: str) -> dict:
-    if tomllib is not None:
+    if _toml_lib is not None:
         try:
-            return tomllib.loads(text)
+            loader = cast(Callable[[str], dict], getattr(_toml_lib, "loads"))
+            return loader(text)
         except Exception as exc:  # pragma: no cover
             raise ConfigError(f"invalid TOML in {source}: {exc}") from exc
-    current: dict = {}
-    root: dict = {}
+    current: dict[str, object] = {}
+    root: dict[str, object] = {}
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -350,7 +379,11 @@ def _loads_toml(text: str, source: str) -> dict:
             parts = line[1:-1].split(".")
             current = root
             for part in parts:
-                current = current.setdefault(part, {})
+                child = current.setdefault(part, {})
+                if not isinstance(child, dict):
+                    child = {}
+                    current[part] = child
+                current = cast(dict[str, object], child)
             continue
         key, value = [part.strip() for part in line.split("=", 1)]
         target = current if current else root
@@ -376,7 +409,9 @@ def _parse_scalar(value: str) -> object:
         return value
 
 
-def _check_section_keys(section: str, raw: dict) -> None:
+def _check_section_keys(section: str, raw: object) -> None:
+    if not isinstance(raw, dict):
+        raise ConfigError(f"[{section}] must be a table")
     unknown = set(raw) - ALLOWED_SECTION_KEYS[section]
     if unknown:
         raise ConfigError(f"unknown keys in [{section}]: {', '.join(sorted(unknown))}")

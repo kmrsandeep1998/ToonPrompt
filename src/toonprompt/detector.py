@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 import sys
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from .models import PromptDocument, PromptSegment, SegmentType
 

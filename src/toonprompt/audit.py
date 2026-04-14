@@ -7,6 +7,8 @@ import json
 import uuid
 
 from .config import Config, default_state_dir
+from .errors import ConfigError
+from .logging_utils import sanitize_prompt_for_hash
 
 _SESSION_ID = str(uuid.uuid4())
 
@@ -33,6 +35,7 @@ def write_audit_record(
     if not config.audit_log_enabled:
         return
     path = _audit_path(config)
+    safe_input = sanitize_prompt_for_hash(input_text)
     record = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "version": _VERSION,
@@ -40,7 +43,7 @@ def write_audit_record(
         "action": action,
         "reason": reason,
         "estimator": estimator,
-        "input_hash": f"sha256:{hashlib.sha256(input_text.encode('utf-8')).hexdigest()}",
+        "input_hash": f"sha256:{hashlib.sha256(safe_input.encode('utf-8')).hexdigest()}",
         "input_tokens_est": input_tokens,
         "output_tokens_est": output_tokens,
         "delta_tokens": output_tokens - input_tokens,
@@ -75,8 +78,8 @@ def read_audit(
 
 def _audit_path(config: Config) -> Path:
     if config.audit_log_path:
-        return Path(config.audit_log_path)
-    return default_state_dir() / "audit.jsonl"
+        return _safe_audit_path(Path(config.audit_log_path))
+    return _safe_audit_path(default_state_dir() / "audit.jsonl")
 
 
 def _rotate_if_needed(path: Path, max_bytes: int) -> None:
@@ -85,3 +88,23 @@ def _rotate_if_needed(path: Path, max_bytes: int) -> None:
         if rotated.exists():
             rotated.unlink()
         path.rename(rotated)
+
+
+def _safe_audit_path(path: Path) -> Path:
+    try:
+        resolved = path.expanduser().resolve()
+    except OSError as exc:
+        raise ConfigError(f"invalid audit path {path!s}: {exc}") from exc
+    home = Path.home().resolve()
+    allow_prefixes = [home, Path("/tmp"), Path("/private/var")]
+    if not any(_is_within(resolved, base) for base in allow_prefixes):
+        raise ConfigError(f"audit path {path!s} must be within user-writable safe directories")
+    return resolved
+
+
+def _is_within(target: Path, base: Path) -> bool:
+    try:
+        target.relative_to(base.resolve())
+        return True
+    except ValueError:
+        return False

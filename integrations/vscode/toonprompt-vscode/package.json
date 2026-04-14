@@ -1,0 +1,50 @@
+{
+  "name": "toonprompt-vscode",
+  "displayName": "ToonPrompt",
+  "description": "Optimize selected text with ToonPrompt before sending to AI coding tools.",
+  "version": "0.0.1",
+  "publisher": "kmrsandeep1998",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:toonprompt.optimizeSelection"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "toonprompt.optimizeSelection",
+        "title": "ToonPrompt: Optimize Selection"
+      }
+    ],
+    "configuration": {
+      "title": "ToonPrompt",
+      "properties": {
+        "toonprompt.binaryPath": {
+          "type": "string",
+          "default": "toon",
+          "description": "Path to ToonPrompt CLI binary."
+        },
+        "toonprompt.profile": {
+          "type": "string",
+          "default": "default",
+          "description": "ToonPrompt profile name."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.2",
+    "eslint": "^8.57.0"
+  }
+}
