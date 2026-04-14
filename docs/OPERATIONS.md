@@ -16,13 +16,11 @@ This runbook covers the non-code operational items required for production usage
 
 ## 2) Required GitHub Secrets
 
-Set these in repository settings:
+No external-repo secret is required for core monorepo workflows.
 
-- `HOMEBREW_TAP_TOKEN`: PAT with write access to `kmrsandeep1998/homebrew-toonprompt`
+Optional:
 
-Optional if using external repos:
-
-- `VSCODE_MARKETPLACE_TOKEN`
+- `VSCODE_MARKETPLACE_TOKEN` (only if publishing extension externally)
 
 ## 3) GitHub Pages for Docs
 
@@ -43,16 +41,12 @@ Recommended protection for `main`:
 - Require conversation resolution
 - Restrict force pushes and deletions
 
-## 5) External Repositories
+## 5) Monorepo Integration Assets
 
-These are separate deployment units:
-
-- Homebrew tap repo: `kmrsandeep1998/homebrew-toonprompt`
-- VS Code extension repo: `kmrsandeep1998/toonprompt-vscode`
-- Optional standalone GitHub Action repo for token budget checks
-
-This repository includes scaffolding under:
+All integration assets are kept in this repository:
 
 - `packaging/homebrew/`
 - `integrations/vscode/toonprompt-vscode/`
 - `integrations/github-action/toonprompt-check/`
+
+You can later mirror any of these into dedicated repositories without changing core ToonPrompt code.
